@@ -13,15 +13,9 @@
 #define DEV_SPY 0
 #define DEV_REPLY 1
 
-#define DEV_TX 0
-
-#if DEV_TX
-  #define DEV_ADDR 0x0B
-  #define DEV_RX_ADDR 0x0C
-#else
-  #define DEV_ADDR 0x0C
-  #define DEV_RX_ADDR 0x0B
-#endif
+#define DEV_TX_ADDR 0x0B
+#define DEV_RX_ADDR 0x0C
+#define DEV_FB_ADDR 0x0C
 
 #include <string.h> // memcpy
 
@@ -42,15 +36,28 @@ int main(void)
   /* Init USB **********************************************************/
   usb_init();																		  /* Init USB */
   //while (!usb_configured());											  /* Wait until connected */
-  //_delay_ms(2500);													/* Wait a littl' bit more */
+  _delay_ms(1500);													/* Wait a littl' bit more */
 
+  uint8_t addr=DEV_FB_ADDR;
   CEC_Init();
   #if DEV_SPY
     CEC_setMode(CEC_LISTEN_ONLY|CEC_PROMISCUIOUS|CEC_ALLOW_ALL_OPCODES);
   #else
     CEC_setMode(CEC_DEFAULT); // CEC_ALLOW_ALL_OPCODES);
-    CEC_registerLogicalAddr(DEV_ADDR,0);
-    
+    if(CEC_registerLogicalAddr(DEV_TX_ADDR,0) == 0)
+      dbg_s("TX Addr Ok");
+    else
+    {
+      dbg_s("TX Addr Failed. Try RX Addr\n");
+      if(CEC_registerLogicalAddr(DEV_RX_ADDR,0) == 0)
+        dbg_s("RX Addr Ok\n");
+      else
+      {
+        dbg_s("RX Addr Failed. Force fallback address\n");
+        CEC_registerLogicalAddr(DEV_FB_ADDR,1);
+      } 
+    }
+      
     uint8_t i;
     for(i=0;i<10;i++)
       CEC_registerOpcode(i,&cecCb);
@@ -61,7 +68,7 @@ int main(void)
   uint8_t cnt=0x00;
 
   #if !DEV_SPY
-  cec_data[0] = DEV_RX_ADDR;
+  cec_data[0] = addr == DEV_TX_ADDR ? DEV_RX_ADDR : DEV_TX_ADDR;
   for(cnt=1;cnt<16;cnt++)
     cec_data[cnt] = cnt;
   CEC_tx(cec_data,cnt);

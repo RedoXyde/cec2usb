@@ -27,6 +27,7 @@ SOFTWARE.
 
 #include <string.h>
 #include <avr/interrupt.h>
+#include <util/delay.h>
 
 #define TEENSY 0
 
@@ -264,6 +265,7 @@ typedef struct
             tx_w,
             tx_tries,
             tx_delay;
+  uint8_t   last_error;
 } CEC_device_t;
 
 CEC_device_t _cec_dev;
@@ -314,6 +316,8 @@ void CEC_Init(void)
   _cec_dev.rx_r = _cec_dev.rx_w = 0;
   _cec_dev.tx_r = _cec_dev.tx_w = 0;
   _cec_dev.tx_delay = 0;
+
+  _cec_dev.last_error = 0;
 
   _cec_dev.nopcodes = 0;
   _cec_dev.hdlr = NULL;
@@ -406,7 +410,16 @@ void CEC_setMode(const uint8_t m)
 
 uint8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll)
 {
-  _cec_dev.addr = addr&0xF;
+  if(!skipPoll)
+  {
+    uint8_t data = addr&0xF; data |= data<<4; // Forge Polling Message
+    CEC_tx(&data,1);
+    while(_cec_dev.tx_r < _cec_dev.tx_w)
+      _delay_ms(2);
+    if(_cec_dev.last_error != CEC_DEV_NACKED)
+      return 1;
+  }
+  _cec_dev.addr = addr & 0xF;
   return 0;
 }
 
@@ -439,6 +452,8 @@ void cecRestart(void)
   CEC_msg_t *m = &_cec_dev.tx[_cec_dev.tx_r];
   _cec_msg.st = CEC_MSG_START;
   _cec_dev.st = CEC_DEV_TX_START;
+  _cec_dev.last_error = 0;
+
 #if DEBUG_CEC_ISR >= 1
   dbg_c('9');
 #endif
@@ -462,6 +477,7 @@ void cecWaitAndRestart(uint8_t n)
      _cec_dev.st == CEC_DEV_TIMEOUT
     )
   {
+    _cec_dev.last_error = _cec_dev.st;
     if(!--_cec_dev.tx_tries)
     {
       #if DEBUG_CEC_TX >= 1
