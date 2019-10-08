@@ -11,8 +11,6 @@
  */
 
 #define DEV_SPY 0
-#define DEV_REPLY 1
-
 #define DEV_TX_ADDR 0x0B
 #define DEV_RX_ADDR 0x0C
 #define DEV_FB_ADDR 0x0C
@@ -26,7 +24,19 @@ void cecCb(const uint8_t* data, const uint8_t len)
   memcpy(tx_data,data,len);
   tx_data[0] = tx_data[0]>>4; // Send back packet
   tx_data[1] = tx_data[1]+1;  // Mess with the data
-  CEC_tx(tx_data,len);
+  CEC_tx(tx_data,len,CEC_TX_MAX_TRIES);
+}
+
+
+void cecDef(const uint8_t* data, const uint8_t len)
+{
+  uint8_t i;
+  dbg_c('[');
+  for(i=0;i<len;i++)
+  {
+    dbg_s(" 0x"); dbg_n(data[i]);
+  }
+  dbg_s(" ]\n");
 }
 
 int main(void) 
@@ -38,31 +48,33 @@ int main(void)
   //while (!usb_configured());											  /* Wait until connected */
   _delay_ms(1500);													/* Wait a littl' bit more */
 
-  uint8_t addr=DEV_FB_ADDR;
+  int8_t addr=DEV_FB_ADDR;
   CEC_Init();
   #if DEV_SPY
     CEC_setMode(CEC_LISTEN_ONLY|CEC_PROMISCUIOUS|CEC_ALLOW_ALL_OPCODES);
+    CEC_setDefaultHandler(&cecDef);
   #else
     CEC_setMode(CEC_DEFAULT); // CEC_ALLOW_ALL_OPCODES);
-    if(CEC_registerLogicalAddr(DEV_TX_ADDR,0) == 0)
+    if((addr = CEC_registerLogicalAddr(DEV_TX_ADDR,0)) >= 0)
       dbg_s("TX Addr Ok");
     else
     {
       dbg_s("TX Addr Failed. Try RX Addr\n");
-      if(CEC_registerLogicalAddr(DEV_RX_ADDR,0) == 0)
+      if((addr = CEC_registerLogicalAddr(DEV_RX_ADDR,0)) >= 0)
         dbg_s("RX Addr Ok\n");
       else
       {
         dbg_s("RX Addr Failed. Force fallback address\n");
-        CEC_registerLogicalAddr(DEV_FB_ADDR,1);
+        addr = CEC_registerLogicalAddr(DEV_FB_ADDR,1);
       } 
     }
       
     uint8_t i;
     for(i=0;i<10;i++)
       CEC_registerOpcode(i,&cecCb);
-    //CEC_setDefaultHandler(&cecDef);
   #endif
+
+  _delay_ms(100);
 
   uint8_t cec_data[16];
   uint8_t cnt=0x00;
@@ -71,7 +83,7 @@ int main(void)
   cec_data[0] = addr == DEV_TX_ADDR ? DEV_RX_ADDR : DEV_TX_ADDR;
   for(cnt=1;cnt<16;cnt++)
     cec_data[cnt] = cnt;
-  CEC_tx(cec_data,cnt);
+  CEC_tx(cec_data,cnt,CEC_TX_MAX_TRIES);
   _delay_ms(100);
   #endif
 

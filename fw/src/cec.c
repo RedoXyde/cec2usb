@@ -164,6 +164,7 @@ typedef struct
    * [4:7] : Block Index [0-15]
    */
   uint8_t   idx;
+  uint8_t   tries;
 } CEC_msg_t;
 
 
@@ -263,7 +264,6 @@ typedef struct
   CEC_msg_t tx[CEC_TX_QUEUE_SIZE];
   volatile uint8_t   tx_r,
             tx_w,
-            tx_tries,
             tx_delay;
   uint8_t   last_error;
 } CEC_device_t;
@@ -329,7 +329,7 @@ void CEC_Init(void)
   sei();
 }
 
-void CEC_tx(const uint8_t* data, const uint8_t l)
+void CEC_tx(const uint8_t* data, const uint8_t l, const uint8_t tries)
 {
   uint8_t len = l; 
   if(_cec_dev.tx_w >= CEC_TX_QUEUE_SIZE)
@@ -350,14 +350,12 @@ void CEC_tx(const uint8_t* data, const uint8_t l)
   m->idx = (len-1) << 4;
     // Set EOM
   m->eom = 1<<(len-1);
+  m->tries = tries;
   
   ++_cec_dev.tx_w;
 
   if(_cec_dev.st == CEC_DEV_FREE)
-  {
-    _cec_dev.tx_tries = 6;
     cecRestart();
-  }
 }
 
 uint8_t CEC_rx(uint8_t* data)
@@ -408,19 +406,19 @@ void CEC_setMode(const uint8_t m)
   _cec_dev.mode = m;
 }
 
-uint8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll)
+int8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll)
 {
   if(!skipPoll)
   {
     uint8_t data = addr&0xF; data |= data<<4; // Forge Polling Message
-    CEC_tx(&data,1);
+    CEC_tx(&data,1,2);
     while(_cec_dev.tx_r < _cec_dev.tx_w)
-      _delay_ms(2);
+      _delay_ms(1);
     if(_cec_dev.last_error != CEC_DEV_NACKED)
-      return 1;
+      return -1;
   }
   _cec_dev.addr = addr & 0xF;
-  return 0;
+  return _cec_dev.addr;
 }
 
 void CEC_setDefaultHandler(cec_cb cb)
@@ -478,19 +476,17 @@ void cecWaitAndRestart(uint8_t n)
     )
   {
     _cec_dev.last_error = _cec_dev.st;
-    if(!--_cec_dev.tx_tries)
+    if(!--(_cec_dev.tx[_cec_dev.tx_r].tries))
     {
       #if DEBUG_CEC_TX >= 1
       dbg_c('D');
       #endif
       ++_cec_dev.tx_r;
-      _cec_dev.tx_tries = 6;
-      
     }
     #if DEBUG_CEC_TX >= 1
     else
     {
-      dbg_c('r'); dbg_c('0'+_cec_dev.tx_tries);
+      dbg_c('r'); dbg_c('0'+_cec_dev.tx[_cec_dev.tx_r].tries);
     }
     #endif
   }
@@ -833,7 +829,6 @@ ISR(TIMER1_COMPA_vect)
       dbg_c('\\');
       #endif
       ++_cec_dev.tx_r;
-      _cec_dev.tx_tries = 6;
       return cecWaitAndRestart(CEC_CNT_AFTER_TX);
 
     case CEC_DEV_TX_START:

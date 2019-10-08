@@ -32,6 +32,7 @@ SOFTWARE.
 #define HDP     PD4 // INT5
 
 #define CEC_ADDR_BROADCAST 0xF
+#define CEC_TX_MAX_TRIES     6
 
 #define CEC_DEFAULT           0x00
 #define CEC_LISTEN_ONLY       0x01
@@ -43,14 +44,14 @@ SOFTWARE.
 void CEC_Init(void);
 void CEC_setMode(const uint8_t m);
 void CEC_setHWAddr(const uint8_t addr[CEC_HWADDR_LEN]);
-uint8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll);
+int8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll);
 
 typedef void (*cec_cb)(const uint8_t* data, const uint8_t len);
 
 void CEC_registerOpcode(const uint8_t opcode, cec_cb hdlr);
 void CEC_setDefaultHandler(cec_cb hdlr);
 
-void CEC_tx(const uint8_t* data, const uint8_t len);
+void CEC_tx(const uint8_t* data, const uint8_t len, const uint8_t tries);
 uint8_t CEC_rx(uint8_t* data);
 void CEC_processQueue(void);
 
