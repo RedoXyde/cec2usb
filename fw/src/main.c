@@ -10,31 +10,31 @@
  *  - 1kB RAM
  */
 
-void cecDataPrint(uint8_t* data, uint8_t len)
+#define DEV_SPY 0
+#define DEV_REPLY 1
+
+#define DEV_TX 0
+
+#if DEV_TX
+  #define DEV_ADDR 0x0B
+  #define DEV_RX_ADDR 0x0C
+#else
+  #define DEV_ADDR 0x0C
+  #define DEV_RX_ADDR 0x0B
+#endif
+
+#include <string.h> // memcpy
+
+void cecCb(const uint8_t* data, const uint8_t len)
 {
-  dbg_s("Rx [0x");   dbg_n(data[0]>>4); 
-  dbg_s(" > 0x"); dbg_n(data[0]&0xF);
-  if(len > 1)
-  {
-    dbg_s(": 0x");  dbg_n(data[1]);
-    if(len > 2)
-    {
-      dbg_s(", ");
-      int i;
-      for(i=2;i<len;i++)
-      {
-        dbg_s("0x"); dbg_n(data[i]); dbg_c(' ');
-      }
-    }
-  }
-  dbg_c(']');
+  dbg_s("cecCb 0x"); dbg_n(data[1]); dbg_c('\n');
+  uint8_t tx_data[16];
+  memcpy(tx_data,data,len);
+  tx_data[0] = tx_data[0]>>4; // Send back packet
+  tx_data[1] = tx_data[1]+1;  // Mess with the data
+  CEC_tx(tx_data,len);
 }
 
-#define DEV_SPY 1
-#define DEV_TX 0
-#define DEV_REPLY 1
-#define DEV_TX_ADDR 0x0B
-#define DEV_RX_ADDR 0x0C
 int main(void) 
 {
   /* Run at 8MHz */
@@ -44,48 +44,34 @@ int main(void)
   //while (!usb_configured());											  /* Wait until connected */
   //_delay_ms(2500);													/* Wait a littl' bit more */
 
+  CEC_Init();
   #if DEV_SPY
-    CEC_Init(0xF, CEC_LISTEN_ONLY|CEC_PROMISCUIOUS);
-  #elif DEV_TX
-    CEC_Init(DEV_TX_ADDR, CEC_DEFAULT|CEC_PROMISCUIOUS);
-    #define DEV_ADDR DEV_TX_ADDR
+    CEC_setMode(CEC_LISTEN_ONLY|CEC_PROMISCUIOUS|CEC_ALLOW_ALL_OPCODES);
   #else
-    CEC_Init(DEV_RX_ADDR, CEC_DEFAULT|CEC_PROMISCUIOUS);
-    #define DEV_ADDR DEV_RX_ADDR
+    CEC_setMode(CEC_DEFAULT); // CEC_ALLOW_ALL_OPCODES);
+    CEC_registerLogicalAddr(DEV_ADDR,0);
+    
+    uint8_t i;
+    for(i=0;i<10;i++)
+      CEC_registerOpcode(i,&cecCb);
+    //CEC_setDefaultHandler(&cecDef);
   #endif
 
   uint8_t cec_data[16];
   uint8_t cnt=0x00;
 
   #if !DEV_SPY
-  cec_data[0] = DEV_TX ? DEV_RX_ADDR : DEV_TX_ADDR;
+  cec_data[0] = DEV_RX_ADDR;
   for(cnt=1;cnt<16;cnt++)
     cec_data[cnt] = cnt;
   CEC_tx(cec_data,cnt);
   _delay_ms(100);
   #endif
 
-  //_delay_ms(10000);
   while(1) 
   {
-    uint8_t m=0; 
-    while((cnt = CEC_rx(cec_data)) != 0)
-    {
-      m++;
-      cecDataPrint(cec_data,cnt);
-      dbg_c(' ');
-      #if !DEV_SPY && DEV_REPLY
-        if((cec_data[0] & 0xF) == DEV_ADDR)
-        {
-          cec_data[0] = cec_data[0]>>4;
-          cec_data[1] = cec_data[1]+1;
-          CEC_tx(cec_data,cnt);
-        }
-      #endif
-    }
-    if(m)
-      dbg_c('\n');
-    //TLed;
-    //_delay_ms(250);
+    CEC_processQueue();
+    //TLed;           // Baaaaad for CEC Timings
+    //dbg_c('.');
   }
 }

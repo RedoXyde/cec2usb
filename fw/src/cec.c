@@ -1,3 +1,27 @@
+/*
+MIT License
+
+Copyright (c) 2019 RedoX
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 #include "cec.h"
 #include "common.h"
 
@@ -130,7 +154,7 @@ inline enum DecodeResult TimerDecode(void)
 
 typedef struct 
 {
-  uint8_t   st;
+  volatile uint8_t   st;
   uint8_t   data[CEC_MSG_BLOCKS];
   uint16_t  eom;
   uint16_t  ack;
@@ -213,27 +237,36 @@ void cecMsgPrint(CEC_msg_t* m, char eol);
 #define cecMsgRxAddr(m) (((m).data[CEC_BLOCK_HEADER])&0xF)
 #define cecMsgTxAddr(m) (((m).data[CEC_BLOCK_HEADER])>>4)
 
-volatile CEC_msg_t _cec_msg;
+CEC_msg_t _cec_msg;
 
 #define CEC_RX_QUEUE_SIZE 16
-#define CEC_TX_QUEUE_SIZE CEC_RX_QUEUE_SIZE
+#define CEC_TX_QUEUE_SIZE 8
+#define CEC_OPCODES_SIZE  32
+
 typedef struct
 {
   uint8_t   addr;
   uint8_t   mode;
+  struct 
+  {
+    uint8_t op;
+    cec_cb  cb;
+  }         opcodes[CEC_OPCODES_SIZE];
+  uint8_t   nopcodes;
+  cec_cb    hdlr;
 
-  uint8_t   st;
+  volatile uint8_t   st;
   CEC_msg_t rx[CEC_RX_QUEUE_SIZE];
-  uint8_t   rx_r,
+  volatile uint8_t   rx_r,
             rx_w;
   CEC_msg_t tx[CEC_TX_QUEUE_SIZE];
-  uint8_t   tx_r,
+  volatile uint8_t   tx_r,
             tx_w,
             tx_tries,
             tx_delay;
 } CEC_device_t;
 
-volatile CEC_device_t _cec_dev;
+CEC_device_t _cec_dev;
 
 // CEC LINE
 #define CEC_DEV_FREE      0x00
@@ -266,7 +299,7 @@ volatile CEC_device_t _cec_dev;
 #define CEC_CNT_AFTER_ERR 3
 
 
-void CEC_Init(uint8_t addr, uint8_t m)
+void CEC_Init(void)
 {
   // CEC Out
   DDRD |= _BV(CEC_OUT);
@@ -274,13 +307,16 @@ void CEC_Init(uint8_t addr, uint8_t m)
 
   // CEC In
   DDRD &= ~_BV(CEC_IN);
-  //PORTD |= _BV(CEC_IN);
+  //PORTD |= _BV(CEC_IN); // Pullup
 
-  _cec_dev.mode = m;
-  _cec_dev.addr = addr & 0xF;
+  _cec_dev.mode = CEC_DEFAULT;
+  _cec_dev.addr = 0xF;
   _cec_dev.rx_r = _cec_dev.rx_w = 0;
   _cec_dev.tx_r = _cec_dev.tx_w = 0;
   _cec_dev.tx_delay = 0;
+
+  _cec_dev.nopcodes = 0;
+  _cec_dev.hdlr = NULL;
 
   tmrStart();
   edgeIntEnable();
@@ -289,8 +325,9 @@ void CEC_Init(uint8_t addr, uint8_t m)
   sei();
 }
 
-void CEC_tx(uint8_t* data, uint8_t len)
+void CEC_tx(const uint8_t* data, const uint8_t l)
 {
+  uint8_t len = l; 
   if(_cec_dev.tx_w >= CEC_TX_QUEUE_SIZE)
     return;
   if(len > 16)
@@ -299,15 +336,16 @@ void CEC_tx(uint8_t* data, uint8_t len)
   if(_cec_dev.tx_r >= _cec_dev.tx_w)
     _cec_dev.tx_r = _cec_dev.tx_w = 0;
   
-  cecMsgReset(&_cec_dev.tx[_cec_dev.tx_w]);
+  CEC_msg_t *m = &_cec_dev.tx[_cec_dev.tx_w];
+  cecMsgReset(m);
     // Set Data
-  memcpy(_cec_dev.tx[_cec_dev.tx_w].data, data, len);
+  memcpy(m->data, data, len);
     // Adjust TX Address (if empty)
-  if(cecMsgTxAddr(_cec_dev.tx[_cec_dev.tx_w]) == 0x0)
-    _cec_dev.tx[_cec_dev.tx_w].data[CEC_BLOCK_HEADER] |= (_cec_dev.addr<<4)&0xF0;
-  _cec_dev.tx[_cec_dev.tx_w].idx = (len-1) << 4;
+  if(cecMsgTxAddr(*m) == 0x0)
+    m->data[CEC_BLOCK_HEADER] |= (_cec_dev.addr<<4)&0xF0;
+  m->idx = (len-1) << 4;
     // Set EOM
-  _cec_dev.tx[_cec_dev.tx_w].eom = 1<<(len-1);
+  m->eom = 1<<(len-1);
   
   ++_cec_dev.tx_w;
 
@@ -322,13 +360,66 @@ uint8_t CEC_rx(uint8_t* data)
 {
   if(_cec_dev.rx_r >= _cec_dev.rx_w)
     return 0x00;
-
-  uint8_t len = cecMsgBlock(_cec_dev.rx[_cec_dev.rx_r]);
+  CEC_msg_t *m = &_cec_dev.rx[_cec_dev.rx_r];
+  uint8_t len = cecMsgBlock(*m);
   if(!len)
     len=16;
-  memcpy(data,_cec_dev.rx[_cec_dev.rx_r].data,len);
+  memcpy(data,m->data,len);
   ++_cec_dev.rx_r;
   return len;
+}
+
+#define DEBUG_CEC_QUEUE 0
+
+void CEC_processQueue(void)
+{
+  while(_cec_dev.rx_r < _cec_dev.rx_w)
+  {
+    CEC_msg_t *m = &_cec_dev.rx[_cec_dev.rx_r];
+    #if DEBUG_CEC_QUEUE
+      cecMsgPrint(m,'\n');
+    #endif
+    uint8_t len = cecMsgBlock(*m);
+    if(!len) len = 16;
+    cec_cb cb = _cec_dev.hdlr;
+    uint8_t i=0;
+    for(;i<_cec_dev.nopcodes;i++)
+    {
+      if(_cec_dev.opcodes[i].op == 
+          m->data[CEC_BLOCK_OPCODE]
+        )
+      {
+        cb = _cec_dev.opcodes[i].cb;
+        i = _cec_dev.nopcodes;
+      }
+    }
+    if(cb)
+      (*cb)(m->data,len);
+    ++_cec_dev.rx_r;
+  }
+}
+
+void CEC_setMode(const uint8_t m)
+{
+  _cec_dev.mode = m;
+}
+
+uint8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll)
+{
+  _cec_dev.addr = addr&0xF;
+  return 0;
+}
+
+void CEC_setDefaultHandler(cec_cb cb)
+{
+  _cec_dev.hdlr = cb;
+}
+
+void CEC_registerOpcode(const uint8_t op, cec_cb cb)
+{
+  _cec_dev.opcodes[_cec_dev.nopcodes].op = op;
+  _cec_dev.opcodes[_cec_dev.nopcodes].cb = cb;
+  ++_cec_dev.nopcodes;
 }
 
 #define DEBUG_CEC_RX 0
@@ -345,14 +436,15 @@ void cecRestart(void)
      _cec_dev.tx_r >= _cec_dev.tx_w
     )
     return;
+  CEC_msg_t *m = &_cec_dev.tx[_cec_dev.tx_r];
   _cec_msg.st = CEC_MSG_START;
   _cec_dev.st = CEC_DEV_TX_START;
 #if DEBUG_CEC_ISR >= 1
   dbg_c('9');
 #endif
-  uint8_t len = cecMsgBlock(_cec_dev.tx[_cec_dev.tx_r])+1;
-  memcpy(_cec_msg.data, _cec_dev.tx[_cec_dev.tx_r].data, len);
-  _cec_msg.eom = _cec_dev.tx[_cec_dev.tx_r].eom;
+  uint8_t len = cecMsgBlock(*m)+1;
+  memcpy(_cec_msg.data, m->data, len);
+  _cec_msg.eom = m->eom;
 #if DEBUG_CEC_TX >= 1
   dbg_s("\nTx ");
   cecMsgPrint(&_cec_msg,' ');
@@ -540,18 +632,39 @@ ISR(INT2_vect)
         #endif
         // Do ACK
         uint8_t rx_addr = cecMsgRxAddr(_cec_msg);
+        _cec_dev.st = CEC_DEV_RX_NACK;
         if((_cec_dev.mode & CEC_LISTEN_ONLY) == 0)
         {
           if(rx_addr != CEC_ADDR_BROADCAST)
           {
             if(rx_addr == _cec_dev.addr)
-              _cec_dev.st = CEC_DEV_RX_ACK;
-            else
-              _cec_dev.st = CEC_DEV_RX_NACK;
+            {
+              if(rx_block == CEC_BLOCK_OPCODE)
+              {
+                if((_cec_dev.mode & CEC_ALLOW_ALL_OPCODES) != 0)
+                  _cec_dev.st = CEC_DEV_RX_ACK;
+                else
+                {
+                  uint8_t i=0;
+                  for(;i<_cec_dev.nopcodes;i++)
+                  {
+                    if(_cec_dev.opcodes[i].op == 
+                      _cec_msg.data[CEC_BLOCK_OPCODE]
+                      )
+                    {
+                      _cec_dev.st = CEC_DEV_RX_ACK;
+                      break;
+                    }
+                  }
+                }
+              }
+              else
+                  _cec_dev.st = CEC_DEV_RX_ACK;
+            }
+              
           }
           else
           {
-            _cec_dev.st = CEC_DEV_RX_NACK;
             // FIXME What Now ?
             #if DEBUG_CEC_RX >= 2
             dbg_c('b');
