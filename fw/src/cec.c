@@ -731,6 +731,8 @@ ISR(INT2_vect)
               ((_cec_dev.mode & CEC_PROMISCUIOUS) != 0)
              ) && 
              (_cec_dev.rx_w < CEC_RX_QUEUE_SIZE)
+              && 
+             (rx_block > CEC_BLOCK_HEADER)
             )
           {
              if(_cec_dev.rx_r >= _cec_dev.rx_w)
