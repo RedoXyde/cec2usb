@@ -17,9 +17,9 @@
 
 #include <string.h> // memcpy
 
-void cecCb(const uint8_t* data, const uint8_t len)
+void cecCb(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
-  dbg_s("cecCb 0x"); dbg_n(data[1]); dbg_c('\n');
+  dbg_s("cecCb 0x"); dbg_n(data[1]); dbg_c(st==0x40 ? 'n' :'a'); dbg_c('\n'); 
   uint8_t tx_data[16];
   memcpy(tx_data,data,len);
   tx_data[0] = tx_data[0]>>4; // Send back packet
@@ -27,16 +27,27 @@ void cecCb(const uint8_t* data, const uint8_t len)
   CEC_tx(tx_data,len,CEC_TX_MAX_TRIES);
 }
 
-
-void cecDef(const uint8_t* data, const uint8_t len)
+void cecDef(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
-  uint8_t i;
-  dbg_c('[');
-  for(i=0;i<len;i++)
+  dbg_s("[0x");   dbg_n(data[0]>>4); 
+  dbg_s(" > 0x"); dbg_n(data[0]&0xF);
+  dbg_c(' ');     dbg_c(st == 0x40 ? 'n' : 'a');
+  if(len > 1)
   {
-    dbg_s(" 0x"); dbg_n(data[i]);
+    dbg_s(": 0x");  dbg_n(data[1]);
+    if(len > 2)
+    {
+      dbg_s(", ");
+      uint8_t i;
+      for(i=2;i<len;i++)
+      {
+        dbg_s("0x"); dbg_n(data[i]);
+        if(i+1<len)
+          dbg_c(' ');
+      }
+    }
   }
-  dbg_s(" ]\n");
+  dbg_s("]\n");
 }
 
 int main(void) 
@@ -55,16 +66,17 @@ int main(void)
     CEC_setDefaultHandler(&cecDef);
   #else
     CEC_setMode(CEC_DEFAULT); // CEC_ALLOW_ALL_OPCODES);
+    dbg_s("Try TX Addr: ");
     if((addr = CEC_registerLogicalAddr(DEV_TX_ADDR,0)) >= 0)
-      dbg_s("TX Addr Ok");
+      dbg_s("Ok\n");
     else
     {
-      dbg_s("TX Addr Failed. Try RX Addr\n");
+      dbg_s("Failed\nTry RX Addr: ");
       if((addr = CEC_registerLogicalAddr(DEV_RX_ADDR,0)) >= 0)
-        dbg_s("RX Addr Ok\n");
+        dbg_s("Ok\n");
       else
       {
-        dbg_s("RX Addr Failed. Force fallback address\n");
+        dbg_s("Failed\nForce fallback address\n");
         addr = CEC_registerLogicalAddr(DEV_FB_ADDR,1);
       } 
     }
@@ -87,10 +99,25 @@ int main(void)
   _delay_ms(100);
   #endif
 
+  uint8_t op = 0x00;
   while(1) 
   {
     CEC_processQueue();
     //TLed;           // Baaaaad for CEC Timings
     //dbg_c('.');
+    #if !DEV_SPY
+    if(addr == DEV_TX_ADDR)
+    {
+      
+      _delay_ms(1000);
+      TLed;
+      cec_data[0] = DEV_RX_ADDR;
+      cec_data[1] = op;
+      if(++op>16) op = 0x00;
+      for(cnt=2;cnt<16;cnt++)
+        cec_data[cnt] = cnt;
+      CEC_tx(cec_data,cnt,CEC_TX_MAX_TRIES);
+    }
+    #endif
   }
 }

@@ -152,7 +152,6 @@ inline enum DecodeResult TimerDecode(void)
 #define CEC_BIT_EOM       8
 #define CEC_BIT_ACK       9
 
-
 typedef struct 
 {
   volatile uint8_t   st;
@@ -167,7 +166,6 @@ typedef struct
   uint8_t   tries;
 } CEC_msg_t;
 
-
 #define CEC_MSG_NONE    0x00  // Message is not used
 #define CEC_MSG_START   0x01  // Start bit has been received ! 
 #define CEC_MSG_HEADER  0x02  // Current block is HEADER  (data[0])
@@ -175,6 +173,7 @@ typedef struct
 #define CEC_MSG_PAYLOAD 0x08  // Current block is PAYLOAD (data[2:15], optional)
 #define CEC_MSG_RXED    0x10  // Message has been completely received ! (EOM bit has been set)
 #define CEC_MSG_TXED    0x20
+#define CEC_MSG_NACKED  0x40
 #define CEC_MSG_ERR     0x80  // Sh*t happened. Reset message and try again.
 
 /**
@@ -296,9 +295,10 @@ CEC_device_t _cec_dev;
 //#define CEC_DEV_RX_NACKED 0x90
 #define CEC_DEV_RXED      0xB0
 
-#define CEC_CNT_AFTER_TX  7
-#define CEC_CNT_AFTER_RX  5
-#define CEC_CNT_AFTER_ERR 3
+// *2.4ms
+#define CEC_CNT_AFTER_TX  7 // 16.8ms
+#define CEC_CNT_AFTER_RX  6 // 12.0ms
+#define CEC_CNT_AFTER_ERR 3 //  7.2ms
 
 
 void CEC_Init(void)
@@ -331,14 +331,16 @@ void CEC_Init(void)
 
 void CEC_tx(const uint8_t* data, const uint8_t l, const uint8_t tries)
 {
-  uint8_t len = l; 
-  if(_cec_dev.tx_w >= CEC_TX_QUEUE_SIZE)
-    return;
-  if(len > 16)
-    len = 16;
+  uint8_t len = l;
 
   if(_cec_dev.tx_r >= _cec_dev.tx_w)
     _cec_dev.tx_r = _cec_dev.tx_w = 0;
+
+  if(_cec_dev.tx_w >= CEC_TX_QUEUE_SIZE)
+    return;
+  
+  if(len > 16)
+    len = 16;
   
   CEC_msg_t *m = &_cec_dev.tx[_cec_dev.tx_w];
   cecMsgReset(m);
@@ -358,19 +360,6 @@ void CEC_tx(const uint8_t* data, const uint8_t l, const uint8_t tries)
     cecRestart();
 }
 
-uint8_t CEC_rx(uint8_t* data)
-{
-  if(_cec_dev.rx_r >= _cec_dev.rx_w)
-    return 0x00;
-  CEC_msg_t *m = &_cec_dev.rx[_cec_dev.rx_r];
-  uint8_t len = cecMsgBlock(*m);
-  if(!len)
-    len=16;
-  memcpy(data,m->data,len);
-  ++_cec_dev.rx_r;
-  return len;
-}
-
 #define DEBUG_CEC_QUEUE 0
 
 void CEC_processQueue(void)
@@ -383,7 +372,15 @@ void CEC_processQueue(void)
     #endif
     uint8_t len = cecMsgBlock(*m);
     if(!len) len = 16;
+
+    uint8_t st  = CEC_MSG_NONE;
+    if((m->ack ^ (((uint32_t)1<<len)-1)) != 0)
+      st = CEC_MSG_NACKED;
+
+    // TODO Check m->ack, update st accordingly
+
     cec_cb cb = _cec_dev.hdlr;
+
     uint8_t i=0;
     for(;i<_cec_dev.nopcodes;i++)
     {
@@ -396,7 +393,7 @@ void CEC_processQueue(void)
       }
     }
     if(cb)
-      (*cb)(m->data,len);
+      (*cb)(st, m->data, len);
     ++_cec_dev.rx_r;
   }
 }
@@ -460,7 +457,7 @@ void cecRestart(void)
   _cec_msg.eom = m->eom;
 #if DEBUG_CEC_TX >= 1
   dbg_s("\nTx ");
-  cecMsgPrint(&_cec_msg,' ');
+  cecMsgPrint(&_cec_msg,'\n');
 #endif
   cecBit(START_AVG,START_LEN);
 #if DEBUG_CEC_ISR >= 1
@@ -509,10 +506,11 @@ ISR(INT2_vect)
     #if DEBUG_CEC_RX >= 3
     dbg_c('F');
     #endif
-    if(_cec_dev.st == CEC_DEV_FREE)
-     cecBit(0,TIMEOUT);
-    //else if(_cec_dev.st == CEC_DEV_PENDING )
-    //{}
+    if(_cec_dev.st == CEC_DEV_FREE ||
+       _cec_dev.st == CEC_DEV_PENDING 
+      )
+      cecBit(0,TIMEOUT);
+    
     //else if(_cec_dev.st < CEC_DEV_RX_START) // TXing
     //  return;
     
@@ -546,7 +544,8 @@ ISR(INT2_vect)
   if(result == BIT_Start)
   {
     if(_cec_dev.st == CEC_DEV_FREE ||
-       _cec_dev.st == CEC_DEV_PENDING )
+       _cec_dev.st == CEC_DEV_PENDING 
+      )
     {
       #if DEBUG_CEC_RX >= 2
         dbg_c('<');
@@ -594,14 +593,14 @@ ISR(INT2_vect)
           (cecMsgRxAddr(_cec_msg) != CEC_ADDR_BROADCAST)
         )
       {
-        #if DEBUG_CEC_TX >= 1
+        #if DEBUG_CEC_TX >= 2
         dbg_c('A');
         #endif
         _cec_dev.st = CEC_DEV_TX_ACKED;
       }
       else
       {
-        #if DEBUG_CEC_TX >= 1
+        #if DEBUG_CEC_TX >= 2
         dbg_c('N');
         #endif
         _cec_dev.st = CEC_DEV_TX_NACKED;
@@ -616,6 +615,7 @@ ISR(INT2_vect)
       break;
     case CEC_DEV_RX_START:
       _cec_msg.st = CEC_MSG_HEADER; // Meh ? 
+      _cec_dev.st = CEC_DEV_RX;
     case CEC_DEV_RX:
       if(rx_block > CEC_MSG_BLOCKS-1)
       {
@@ -634,7 +634,7 @@ ISR(INT2_vect)
         dbg_c('.');
         #endif
       }
-      // Enough data bits received ! Next one must be EOM
+      // Enough data bits received ! Next one is EOM
       else if(rx_bit == CEC_BIT_EOM)
       {
         _cec_msg.eom |= (result&0b1)<<rx_block;
@@ -642,58 +642,68 @@ ISR(INT2_vect)
         #if DEBUG_CEC_RX >= 2
         dbg_c((result&0b1) ? 'E' : 'e');
         #endif
-        // Do ACK
-        uint8_t rx_addr = cecMsgRxAddr(_cec_msg);
+
+        // EOM bit has been received, Prepare ACK        
+        
+        // Listen only, do not ACK/NACK msg
+        if((_cec_dev.mode & CEC_LISTEN_ONLY) != 0)  
+          break;
+
+        // Default is to NACK msg
         _cec_dev.st = CEC_DEV_RX_NACK;
-        if((_cec_dev.mode & CEC_LISTEN_ONLY) == 0)
+        uint8_t rx_addr = cecMsgRxAddr(_cec_msg);
+
+        // Broadcast msg, logic is inverted.
+        if(rx_addr == CEC_ADDR_BROADCAST)
         {
-          if(rx_addr != CEC_ADDR_BROADCAST)
+          // FIXME What Now ?
+          // Currently accepting all broadcast msgs
+          #if DEBUG_CEC_RX >= 2
+          dbg_c('b');
+          #endif
+          break;
+        }
+
+        // Msg is not for me, NACK
+        if(rx_addr != _cec_dev.addr)
+          break;
+
+        // Block is HEADER or data, ACK
+        // Block is OPCODE and ALLOW_ALL_OPCODE is set, ACK
+        if((rx_block != CEC_BLOCK_OPCODE) ||
+           (_cec_dev.mode & CEC_ALLOW_ALL_OPCODES) != 0
+          )
+        {
+          _cec_dev.st = CEC_DEV_RX_ACK;
+          break;
+        }
+
+        // Block is OPCODE.Check for registered OPCODE
+        uint8_t i=0;
+        for(;i<_cec_dev.nopcodes;i++)
+        {
+          // OPCODE is registered, ACK
+          if(_cec_dev.opcodes[i].op == 
+            _cec_msg.data[CEC_BLOCK_OPCODE]
+            )
           {
-            if(rx_addr == _cec_dev.addr)
-            {
-              if(rx_block == CEC_BLOCK_OPCODE)
-              {
-                if((_cec_dev.mode & CEC_ALLOW_ALL_OPCODES) != 0)
-                  _cec_dev.st = CEC_DEV_RX_ACK;
-                else
-                {
-                  uint8_t i=0;
-                  for(;i<_cec_dev.nopcodes;i++)
-                  {
-                    if(_cec_dev.opcodes[i].op == 
-                      _cec_msg.data[CEC_BLOCK_OPCODE]
-                      )
-                    {
-                      _cec_dev.st = CEC_DEV_RX_ACK;
-                      break;
-                    }
-                  }
-                }
-              }
-              else
-                  _cec_dev.st = CEC_DEV_RX_ACK;
-            }
-              
-          }
-          else
-          {
-            // FIXME What Now ?
-            #if DEBUG_CEC_RX >= 2
-            dbg_c('b');
-            #endif
+            _cec_dev.st = CEC_DEV_RX_ACK;
+            break;
           }
         }
-        
-      } // EOM was received ! Next one must be ACK 
+      } // EOM was received ! Next one is ACK 
       else if(rx_bit == CEC_BIT_ACK)
       {
         uint8_t rx_addr = cecMsgRxAddr(_cec_msg);
         #if DEBUG_CEC_RX >= 2
         dbg_c(result == BIT_L ? 'a' : 'n');
         #endif
+        if(result == BIT_L)
+          _cec_msg.ack |= (0b1)<<rx_block;
 
         // Increment block number. Also, reset bit count !
         _cec_msg.idx = (rx_block+1)<<4; 
+        // Update msg Status, mostly for DEBUG
         if(rx_block == CEC_BLOCK_HEADER)
         {
           _cec_msg.st  = CEC_MSG_OPCODE;
@@ -714,33 +724,35 @@ ISR(INT2_vect)
         #endif
 
         // EOM was set, Message is complete ! 
-        if((_cec_msg.eom >> rx_block)&0b1)
+        if(((_cec_msg.eom >> rx_block)&0b1) ||
+           (((_cec_msg.ack >> rx_block)&0b1) == 0 && rx_addr != CEC_ADDR_BROADCAST) || 
+           (((_cec_msg.ack >> rx_block)&0b1) != 0 && rx_addr == CEC_ADDR_BROADCAST)
+          )
         {
           #if DEBUG_CEC_RX >= 2
           dbg_c('>');
           dbg_c('\n');
           #endif
+          #if DEBUG_CEC_RX >= 1
+          dbg_s("Rxed ");
+          cecMsgPrint(&_cec_msg,' ');
+          dbg_c('\n');
+          #endif
+
           _cec_msg.st = CEC_MSG_RXED;
+          _cec_dev.st = CEC_DEV_RXED;
 
           if((rx_addr == _cec_dev.addr ||
               rx_addr == CEC_ADDR_BROADCAST ||
               ((_cec_dev.mode & CEC_PROMISCUIOUS) != 0)
              ) && 
              (_cec_dev.rx_w < CEC_RX_QUEUE_SIZE)
-              && 
-             (rx_block > CEC_BLOCK_HEADER)
             )
           {
              if(_cec_dev.rx_r >= _cec_dev.rx_w)
               _cec_dev.rx_r = _cec_dev.rx_w = 0;
             memcpy(&_cec_dev.rx[_cec_dev.rx_w++], &_cec_msg, sizeof(CEC_msg_t));
           }
-          _cec_dev.st = CEC_DEV_RXED;
-          #if DEBUG_CEC_RX >= 1
-          dbg_s("Rxed ");
-          cecMsgPrint(&_cec_msg,' ');
-          dbg_c('\n');
-          #endif
           return cecWaitAndRestart(CEC_CNT_AFTER_RX);
           
         }
@@ -751,9 +763,9 @@ ISR(INT2_vect)
       #endif
       break;
 
-      default:
-        dbg_c('#'); dbg_n(_cec_dev.st);
-        return;      
+    default:
+      dbg_c('#'); dbg_n(_cec_dev.st);
+      return;      
   }
 }
 /////////////////////////////////////////////////////////////////////////////
@@ -916,11 +928,15 @@ ISR(TIMER1_COMPA_vect)
 
 void cecMsgPrint(CEC_msg_t* m, char eol)
 {
+
   dbg_s("[0x");   dbg_n(m->data[CEC_BLOCK_HEADER]>>4); 
   dbg_s(" > 0x"); dbg_n(m->data[CEC_BLOCK_HEADER]&0xF);
+  if(m->st != CEC_MSG_START) dbg_c((m->ack & 0b1) ? 'a': 'n');
+
   if((m->eom & 0b1) == 0)
   {
     dbg_s(": 0x");  dbg_n(m->data[CEC_BLOCK_OPCODE]);
+    if(m->st != CEC_MSG_START) dbg_c((m->ack & 0b10) ? 'a': 'n');
     if((m->eom & 0b10) == 0)
     {
       dbg_s(", ");
@@ -928,6 +944,7 @@ void cecMsgPrint(CEC_msg_t* m, char eol)
       for(i=CEC_BLOCK_OPCODE+1;i<CEC_MSG_BLOCKS;i++)
       {
         dbg_s("0x"); dbg_n(m->data[i]);
+        if(m->st != CEC_MSG_START) dbg_c((m->ack & (1<<i)) ? 'a': 'n');
         if((m->eom & (1<<i)) == 0)
           dbg_c(' ');
         else

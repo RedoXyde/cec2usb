@@ -46,13 +46,12 @@ void CEC_setMode(const uint8_t m);
 void CEC_setHWAddr(const uint8_t addr[CEC_HWADDR_LEN]);
 int8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll);
 
-typedef void (*cec_cb)(const uint8_t* data, const uint8_t len);
+typedef void (*cec_cb)(const uint8_t st, const uint8_t* data, const uint8_t len);
 
 void CEC_registerOpcode(const uint8_t opcode, cec_cb hdlr);
 void CEC_setDefaultHandler(cec_cb hdlr);
 
 void CEC_tx(const uint8_t* data, const uint8_t len, const uint8_t tries);
-uint8_t CEC_rx(uint8_t* data);
 void CEC_processQueue(void);
 
 #endif
