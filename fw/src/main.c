@@ -2,7 +2,7 @@
 #include "common.h"
 #include "main.h"
 #include "usb.h"
-
+#include "usb_keyboard.h"
 #include "cec.h"
 
 /**
@@ -51,35 +51,72 @@
 
 /**
  * Grundig TV remote
- *   Key              CEC code
- *    1               0x21
- *    2               0x22
- *    3               0x23
- *    4               0x24
- *    5               0x25
- *    6               0x26
- *    7               0x27
- *    8               0x28
- *    9               0x29
- *    0               0x20
- *    Repeat          0x09
- *    EPG             0x53
- *    P+              0x30
- *    P-              0x31
- *    Up              0x01
- *    Down            0x02
- *    Left            0x03
- *    Right           0x05
- *    Select          0x00
- *    Back            0x0D
- *    Info            0x35
- *    Red/Play/Pause  0x44
- *    Green/Rewind    0x48
- *    Yellow/Stop     0x45
- *    Blue/Forward    0x49
- *    Txt             0x4c
- *    Rec             0x4b
+ *   Key              CEC code      Kodi Keyboard
+ *    1               0x21          KEYPAD_1
+ *    2               0x22          KEYPAD_2
+ *    3               0x23          KEYPAD_3
+ *    4               0x24          KEYPAD_4
+ *    5               0x25          KEYPAD_5
+ *    6               0x26          KEYPAD_6
+ *    7               0x27          KEYPAD_7
+ *    8               0x28          KEYPAD_8
+ *    9               0x29          KEYPAD_9
+ *    0               0x20          KEYPAD_0
+ *    Repeat          0x09          KEY_W
+ *    EPG             0x53          KEY_C
+ *    P+              0x30          KEY_PAGE_UP
+ *    P-              0x31          KEY_PAGE_DOWN
+ *    Up              0x01          KEY_UP
+ *    Down            0x02          KEY_DOWN
+ *    Left            0x03          KEY_LEFT
+ *    Right           0x05          KEY_RIGHT
+ *    Select          0x00          KEY_ENTER
+ *    Back            0x0D          KEY_BACKSPACE
+ *    Info            0x35          KEY_I
+ *    Red/Play/Pause  0x44          KEY_SPACE
+ *    Green/Rewind    0x48          KEY_R
+ *    Yellow/Stop     0x45          KEY_X
+ *    Blue/Forward    0x49          KEY_F
+ *    Txt             0x4c          KEY_TAB
+ *    Rec             0x4b          KEY_PRINTSCREEN
  */
+
+typedef struct {
+  uint8_t cec;
+  uint8_t kbd;
+} cec_key_map_t;
+
+#define CEC_KEYS_KBD_MAPPINGS_NB  27
+const cec_key_map_t _cec_keys_mappings[CEC_KEYS_KBD_MAPPINGS_NB] = 
+{
+  { .cec = 0x21, .kbd = KEYPAD_1        },
+  { .cec = 0x22, .kbd = KEYPAD_2        },
+  { .cec = 0x23, .kbd = KEYPAD_3        },
+  { .cec = 0x24, .kbd = KEYPAD_4        },
+  { .cec = 0x25, .kbd = KEYPAD_5        },
+  { .cec = 0x26, .kbd = KEYPAD_6        },
+  { .cec = 0x27, .kbd = KEYPAD_7        },
+  { .cec = 0x28, .kbd = KEYPAD_8        },
+  { .cec = 0x29, .kbd = KEYPAD_9        },
+  { .cec = 0x20, .kbd = KEYPAD_0        },
+  { .cec = 0x09, .kbd = KEY_W           },
+  { .cec = 0x53, .kbd = KEY_C           },
+  { .cec = 0x30, .kbd = KEY_PAGE_UP     },
+  { .cec = 0x31, .kbd = KEY_PAGE_DOWN   },
+  { .cec = 0x01, .kbd = KEY_UP          },
+  { .cec = 0x02, .kbd = KEY_DOWN        },
+  { .cec = 0x03, .kbd = KEY_LEFT        },
+  { .cec = 0x04, .kbd = KEY_RIGHT       },
+  { .cec = 0x00, .kbd = KEY_ENTER       },
+  { .cec = 0x0D, .kbd = KEY_BACKSPACE   },
+  { .cec = 0x35, .kbd = KEY_I           },
+  { .cec = 0x44, .kbd = KEY_SPACE       },
+  { .cec = 0x48, .kbd = KEY_R           },
+  { .cec = 0x45, .kbd = KEY_X           },
+  { .cec = 0x49, .kbd = KEY_F           },
+  { .cec = 0x4c, .kbd = KEY_TAB         },
+  { .cec = 0x4b, .kbd = KEY_PRINTSCREEN },
+};
 
 #define DEV_SPY 0
 void cecSpy(const uint8_t st, const uint8_t* data, const uint8_t len);
@@ -214,12 +251,25 @@ void cecSetMenuLanguage(const uint8_t st, const uint8_t* data, const uint8_t len
 void cecKeyDown(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   uint8_t k = data[2];
-  dbg_s("< KeyDown 0x"); dbg_n(k); dbg_c('\n');
+  dbg_s("< KeyDown 0x"); dbg_n(k); 
+  uint8_t i;
+  for(i=0;i<CEC_KEYS_KBD_MAPPINGS_NB;i++)
+  {
+    const cec_key_map_t* m = &_cec_keys_mappings[i];
+    if(k == m->cec)
+    {
+      usb_keyboard_press(0,m->kbd,0);
+      dbg_s(" Mapped \n");
+      return;
+    }
+  }
+  dbg_c('\n');
 }
 
 void cecKeyUp(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   dbg_s("< KeyUp\n");
+  usb_keyboard_release();
 }
 
 int main(void)
@@ -275,7 +325,9 @@ int main(void)
   #endif
   
   while(1)
+  {
     CEC_processQueue();
+  }
 }
 
 void cecSpy(const uint8_t st, const uint8_t* data, const uint8_t len)

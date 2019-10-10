@@ -48,41 +48,50 @@
 #define RAWHID_USAGE_PAGE  0xFF42  // recommended: 0xFF00 to 0xFFFF
 #define RAWHID_USAGE    0x0200  // recommended: 0x0100 to 0xFFFF
 
-// These determine the bandwidth that will be allocated
-// for your communication.  You do not need to use it
-// all, but allocating more than necessary means reserved
-// bandwidth is no longer available to other USB devices.
-#define RAWHID_TX_SIZE    32  // transmit packet size
-#define RAWHID_TX_INTERVAL  8  // max # of ms between transmit packets
-#define RAWHID_RX_SIZE    32  // receive packet size
-#define RAWHID_RX_INTERVAL  8  // max # of ms between receive packets
-
-#define DEBUG_TX_SIZE    32
-
 /**************************************************************************
  *
  *  Endpoint Buffer Configuration
  *
  **************************************************************************/
 
-#define ENDPOINT0_SIZE    32
+#define ENDPOINT0_SIZE      32
 
-#define RAWHID_INTERFACE  0
+// These determine the bandwidth that will be allocated
+// for your communication.  You do not need to use it
+// all, but allocating more than necessary means reserved
+// bandwidth is no longer available to other USB devices.
+#define RAWHID_TX_SIZE      32  // transmit packet size
+#define RAWHID_TX_INTERVAL  8  // max # of ms between transmit packets
+#define RAWHID_RX_SIZE      32  // receive packet size
+#define RAWHID_RX_INTERVAL  8  // max # of ms between receive packets
+
+#define DEBUG_TX_SIZE       32
+
+#define KEYBOARD_SIZE       8
+
+
+#define RAWHID_INTERFACE    0
 #define RAWHID_TX_ENDPOINT  1
 #define RAWHID_RX_ENDPOINT  2
 
-#define RAWHID_TX_BUFFER  EP_SINGLE_BUFFER
-#define RAWHID_RX_BUFFER  EP_SINGLE_BUFFER
+#define RAWHID_TX_BUFFER    EP_SINGLE_BUFFER
+#define RAWHID_RX_BUFFER    EP_SINGLE_BUFFER
 
-#define DEBUG_INTERFACE   1
-#define DEBUG_TX_ENDPOINT 4
-#define DEBUG_TX_BUFFER   EP_SINGLE_BUFFER
+#define DEBUG_INTERFACE     1
+#define DEBUG_TX_ENDPOINT   4
+#define DEBUG_TX_BUFFER     EP_SINGLE_BUFFER
+
+#define KEYBOARD_INTERFACE  2
+#define KEYBOARD_ENDPOINT   3
+
+#define KEYBOARD_BUFFER     EP_SINGLE_BUFFER
+
 
 static const uint8_t PROGMEM endpoint_config_table[] = 
 {
   1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(RAWHID_TX_SIZE) | RAWHID_TX_BUFFER,
-  1, EP_TYPE_INTERRUPT_OUT,  EP_SIZE(RAWHID_RX_SIZE) | RAWHID_RX_BUFFER,
-  0,
+  1, EP_TYPE_INTERRUPT_OUT, EP_SIZE(RAWHID_RX_SIZE) | RAWHID_RX_BUFFER,
+  1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(KEYBOARD_SIZE) | KEYBOARD_BUFFER,
   1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(DEBUG_TX_SIZE) | DEBUG_TX_BUFFER,
   0,
 };
@@ -147,6 +156,42 @@ static const uint8_t PROGMEM debug_hid_report_desc[] = {
 };
 
 
+// Keyboard Protocol 1, HID 1.11 spec, Appendix B, page 59-60
+static const uint8_t PROGMEM keyboard_hid_report_desc[] = {
+  0x05, 0x01,             // Usage Page (Generic Desktop),
+  0x09, 0x06,             // Usage (Keyboard),
+  0xA1, 0x01,             // Collection (Application),
+  0x75, 0x01,             //   Report Size (1),
+  0x95, 0x08,             //   Report Count (8),
+  0x05, 0x07,             //   Usage Page (Key Codes),
+  0x19, 0xE0,             //   Usage Minimum (224),
+  0x29, 0xE7,             //   Usage Maximum (231),
+  0x15, 0x00,             //   Logical Minimum (0),
+  0x25, 0x01,             //   Logical Maximum (1),
+  0x81, 0x02,             //   Input (Data, Variable, Absolute), ;Modifier byte
+  0x95, 0x01,             //   Report Count (1),
+  0x75, 0x08,             //   Report Size (8),
+  0x81, 0x03,             //   Input (Constant),                 ;Reserved byte
+  0x95, 0x05,             //   Report Count (5),
+  0x75, 0x01,             //   Report Size (1),
+  0x05, 0x08,             //   Usage Page (LEDs),
+  0x19, 0x01,             //   Usage Minimum (1),
+  0x29, 0x05,             //   Usage Maximum (5),
+  0x91, 0x02,             //   Output (Data, Variable, Absolute), ;LED report
+  0x95, 0x01,             //   Report Count (1),
+  0x75, 0x03,             //   Report Size (3),
+  0x91, 0x03,             //   Output (Constant),                 ;LED report padding   
+  0x95, 0x06,             //   Report Count (6),
+  0x75, 0x08,             //   Report Size (8),
+  0x15, 0x00,             //   Logical Minimum (0),
+  0x25, 0x68,             //   Logical Maximum(104),
+  0x05, 0x07,             //   Usage Page (Key Codes),
+  0x19, 0x00,             //   Usage Minimum (0),
+  0x29, 0x68,             //   Usage Maximum (104),
+  0x81, 0x00,             //   Input (Data, Array),
+  0xc0                    // End Collection
+};
+
 #define CONFIG_DESC_SIZE          (9)
 
 #define RAWHID_DESC_OFFSET        (CONFIG_DESC_SIZE)
@@ -159,89 +204,125 @@ static const uint8_t PROGMEM debug_hid_report_desc[] = {
 #define DEBUG_HID_DESC_OFFSET     (DEBUG_DESC_OFFSET+DEBUG_DESC_SIZE)
 #define DEBUG_HID_DESC_SIZE       (9+7)
 
-#define CONFIG1_DESC_SIZE         (CONFIG_DESC_SIZE                         \
-                                 + RAWHID_DESC_SIZE + RAWHID_HID_DESC_SIZE  \
-                                 + DEBUG_DESC_SIZE + DEBUG_HID_DESC_SIZE    \
+#define KEYBOARD_DESC_OFFSET      (DEBUG_HID_DESC_OFFSET+DEBUG_HID_DESC_SIZE)
+#define KEYBOARD_DESC_SIZE        (9)
+#define KEYBOARD_HID_DESC_OFFSET  (KEYBOARD_DESC_OFFSET+KEYBOARD_DESC_SIZE)
+#define KEYBOARD_HID_DESC_SIZE    (9+7)
+
+#define CONFIG1_DESC_SIZE         (CONFIG_DESC_SIZE                            \
+                                 + RAWHID_DESC_SIZE + RAWHID_HID_DESC_SIZE     \
+                                 + DEBUG_DESC_SIZE + DEBUG_HID_DESC_SIZE       \
+                                 + KEYBOARD_DESC_SIZE + KEYBOARD_HID_DESC_SIZE \
                                   )
 
 static const uint8_t PROGMEM config1_descriptor[CONFIG1_DESC_SIZE] = {
   // configuration descriptor, USB spec 9.6.3, page 264-266, Table 9-10
-  CONFIG_DESC_SIZE,           // bLength
-  2,          // bDescriptorType;
-  LSB(CONFIG1_DESC_SIZE),      // wTotalLength
+  CONFIG_DESC_SIZE,               // bLength
+  2,                              // bDescriptorType;
+  LSB(CONFIG1_DESC_SIZE),         // wTotalLength
   MSB(CONFIG1_DESC_SIZE),
-  2,          // bNumInterfaces
-  1,          // bConfigurationValue
-  0,          // iConfiguration
-  0xC0,       // bmAttributes
-  50,         // bMaxPower
-  ////////////////////////////////////////////////////////////////////////////////
+  2,                              // bNumInterfaces
+  1,                              // bConfigurationValue
+  0,                              // iConfiguration
+  0xC0,                           // bmAttributes
+  50,                             // bMaxPower
+  //////////////////////////////////////////////////////////////////////////////
   // interface descriptor, USB spec 9.6.5, page 267-269, Table 9-12
-  9,          // bLength
-  4,          // bDescriptorType
-  RAWHID_INTERFACE,      // bInterfaceNumber
-  0,          // bAlternateSetting
-  2,          // bNumEndpoints
-  0x03,          // bInterfaceClass (0x03 = HID)
-  0x00,          // bInterfaceSubClass (0x01 = Boot)
-  0x00,          // bInterfaceProtocol (0x01 = Keyboard)
-  2,          // iInterface
+  9,                              // bLength
+  4,                              // bDescriptorType
+  RAWHID_INTERFACE,               // bInterfaceNumber
+  0,                              // bAlternateSetting
+  2,                              // bNumEndpoints
+  0x03,                           // bInterfaceClass (0x03 = HID)
+  0x00,                           // bInterfaceSubClass (0x01 = Boot)
+  0x00,                           // bInterfaceProtocol (0x01 = Keyboard)
+  2,                              // iInterface
 
   // HID interface descriptor, HID 1.11 spec, section 6.2.1
-  9,          // bLength
-  0x21,          // bDescriptorType
-  0x11, 0x01,        // bcdHID
-  0,          // bCountryCode
-  1,          // bNumDescriptors
-  0x22,          // bDescriptorType
-  sizeof(rawhid_hid_report_desc),    // wDescriptorLength
+  9,                              // bLength
+  0x21,                           // bDescriptorType
+  0x11, 0x01,                     // bcdHID
+  0,                              // bCountryCode
+  1,                              // bNumDescriptors
+  0x22,                           // bDescriptorType
+  sizeof(rawhid_hid_report_desc), // wDescriptorLength
   0,
 
   // endpoint descriptor, USB spec 9.6.6, page 269-271, Table 9-13
-  7,          // bLength
-  5,          // bDescriptorType
-  RAWHID_TX_ENDPOINT | 0x80,    // bEndpointAddress
-  0x03,          // bmAttributes (0x03=intr)
-  RAWHID_TX_SIZE, 0,      // wMaxPacketSize
-  RAWHID_TX_INTERVAL,      // bInterval
+  7,                                // bLength
+  5,                                // bDescriptorType
+  RAWHID_TX_ENDPOINT | 0x80,        // bEndpointAddress
+  0x03,                             // bmAttributes (0x03=intr)
+  RAWHID_TX_SIZE, 0,                // wMaxPacketSize
+  RAWHID_TX_INTERVAL,               // bInterval
 
   // endpoint descriptor, USB spec 9.6.6, page 269-271, Table 9-13
-  7,          // bLength
-  5,          // bDescriptorType
-  RAWHID_RX_ENDPOINT,      // bEndpointAddress
-  0x03,          // bmAttributes (0x03=intr)
-  RAWHID_RX_SIZE, 0,      // wMaxPacketSize
-  RAWHID_RX_INTERVAL,      // bInterval
+  7,                                // bLength
+  5,                                // bDescriptorType
+  RAWHID_RX_ENDPOINT,               // bEndpointAddress
+  0x03,                             // bmAttributes (0x03=intr)
+  RAWHID_RX_SIZE, 0,                // wMaxPacketSize
+  RAWHID_RX_INTERVAL,               // bInterval
 
-  ////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // interface descriptor, USB spec 9.6.5, page 267-269, Table 9-12
-  9,          // bLength
-  4,          // bDescriptorType
-  DEBUG_INTERFACE,      // bInterfaceNumber
-  0,          // bAlternateSetting
-  1,          // bNumEndpoints
-  0x03,          // bInterfaceClass (0x03 = HID)
-  0x00,          // bInterfaceSubClass
-  0x00,          // bInterfaceProtocol
-  3,          // iInterface
+  9,                                // bLength
+  4,                                // bDescriptorType
+  DEBUG_INTERFACE,                  // bInterfaceNumber
+  0,                                // bAlternateSetting
+  1,                                // bNumEndpoints
+  0x03,                             // bInterfaceClass (0x03 = HID)
+  0x00,                             // bInterfaceSubClass
+  0x00,                             // bInterfaceProtocol
+  3,                                // iInterface
 
   // HID interface descriptor, HID 1.11 spec, section 6.2.1
-  9,          // bLength
-  0x21,          // bDescriptorType
-  0x11, 0x01,        // bcdHID
-  0,          // bCountryCode
-  1,          // bNumDescriptors
-  0x22,          // bDescriptorType
+  9,                                // bLength
+  0x21,                             // bDescriptorType
+  0x11, 0x01,                       // bcdHID
+  0,                                // bCountryCode
+  1,                                // bNumDescriptors
+  0x22,                             // bDescriptorType
   sizeof(debug_hid_report_desc),    // wDescriptorLength
   0,
   
   // endpoint descriptor, USB spec 9.6.6, page 269-271, Table 9-13
-  7,          // bLength
-  5,          // bDescriptorType
-  DEBUG_TX_ENDPOINT | 0x80,    // bEndpointAddress
-  0x03,          // bmAttributes (0x03=intr)
-  DEBUG_TX_SIZE, 0,      // wMaxPacketSize
-  1          // bInterval
+  7,                                // bLength
+  5,                                // bDescriptorType
+  DEBUG_TX_ENDPOINT | 0x80,         // bEndpointAddress
+  0x03,                             // bmAttributes (0x03=intr)
+  DEBUG_TX_SIZE, 0,                 // wMaxPacketSize
+  1,                                // bInterval
+
+  //////////////////////////////////////////////////////////////////////////////
+  // interface descriptor, USB spec 9.6.5, page 267-269, Table 9-12
+  9,                                // bLength
+  4,                                // bDescriptorType
+  KEYBOARD_INTERFACE,               // bInterfaceNumber
+  0,                                // bAlternateSetting
+  1,                                // bNumEndpoints
+  0x03,                             // bInterfaceClass (0x03 = HID)
+  0x01,                             // bInterfaceSubClass (0x01 = Boot)
+  0x01,                             // bInterfaceProtocol (0x01 = Keyboard)
+  0,                                // iInterface
+
+  // HID interface descriptor, HID 1.11 spec, section 6.2.1
+  9,                                // bLength
+  0x21,                             // bDescriptorType
+  0x11, 0x01,                       // bcdHID
+  0,                                // bCountryCode
+  1,                                // bNumDescriptors
+  0x22,                             // bDescriptorType
+  sizeof(keyboard_hid_report_desc), // wDescriptorLength
+  0,
+
+  // endpoint descriptor, USB spec 9.6.6, page 269-271, Table 9-13
+  7,                                // bLength
+  5,                                // bDescriptorType
+  KEYBOARD_ENDPOINT | 0x80,         // bEndpointAddress
+  0x03,                             // bmAttributes (0x03=intr)
+  KEYBOARD_SIZE, 0,                 // wMaxPacketSize
+1,                                  // bInterval
 
 };
 
@@ -289,6 +370,8 @@ static const struct descriptor_list_struct {
   {0x2100, RAWHID_INTERFACE, config1_descriptor+RAWHID_HID_DESC_OFFSET, 9},
   {0x2200, DEBUG_INTERFACE, debug_hid_report_desc, sizeof(debug_hid_report_desc)},
   {0x2100, DEBUG_INTERFACE, config1_descriptor+DEBUG_HID_DESC_OFFSET, 9},
+  {0x2200, KEYBOARD_INTERFACE, keyboard_hid_report_desc, sizeof(keyboard_hid_report_desc)},
+  {0x2100, KEYBOARD_INTERFACE, config1_descriptor+KEYBOARD_HID_DESC_OFFSET, 9},
   {0x0300, 0x0000, (const uint8_t *)&string0, 4},
   {0x0301, 0x0409, (const uint8_t *)&string1, sizeof(STR_MANUFACTURER)},
   {0x0302, 0x0409, (const uint8_t *)&string2, sizeof(STR_PRODUCT)},
@@ -315,6 +398,29 @@ static volatile uint8_t tx_timeout_count=0;
  * packet, or send a zero length packet.
  */
 static volatile uint8_t debug_flush_timer=0;
+
+// which modifier keys are currently pressed
+// 1=left ctrl,    2=left shift,   4=left alt,    8=left gui
+// 16=right ctrl, 32=right shift, 64=right alt, 128=right gui
+uint8_t keyboard_modifier_keys=0;
+
+// which keys are currently pressed, up to 6 keys may be down at once
+uint8_t keyboard_keys[6]={0,0,0,0,0,0};
+
+// protocol setting from the host.  We use exactly the same report
+// either way, so this variable only stores the setting since we
+// are required to be able to report which setting is in use.
+static uint8_t keyboard_protocol=1;
+
+// the idle configuration, how often we send the report to the
+// host (ms * 4) even when it hasn't changed
+static uint8_t keyboard_idle_config=125;
+
+// count until idle timeout
+static uint8_t keyboard_idle_count=0;
+
+// 1=num lock, 2=caps lock, 4=scroll lock, 8=compose, 16=kana
+volatile uint8_t keyboard_leds=0;
 
 /**************************************************************************
  *
@@ -483,7 +589,58 @@ void usb_debug_flush_output(void)
   SREG = intr_state;
 }
 
+// perform a single keystroke
+void usb_keyboard_press(uint8_t id, uint8_t key, uint8_t modifier)
+{
+  if(id > 5)
+    return;
+  keyboard_modifier_keys = modifier;
+  keyboard_keys[id] = key;
+  usb_keyboard_send();
+}
 
+// send the contents of keyboard_keys and keyboard_modifier_keys
+void usb_keyboard_send(void)
+{
+  uint8_t i, intr_state, timeout;
+
+  if (!usb_configuration) return;
+  intr_state = SREG;
+  cli();
+  UENUM = KEYBOARD_ENDPOINT;
+  timeout = UDFNUML + 50;
+  while (1) 
+  {
+    // are we ready to transmit?
+    if (UEINTX & (1<<RWAL)) break;
+    SREG = intr_state;
+    // has the USB gone offline?
+    if (!usb_configuration) return;
+    // have we waited too long?
+    if (UDFNUML == timeout) return;
+    // get ready to try checking again
+    intr_state = SREG;
+    cli();
+    UENUM = KEYBOARD_ENDPOINT;
+  }
+  UEDATX = keyboard_modifier_keys;
+  UEDATX = 0;
+  for (i=0; i<6; i++) {
+    UEDATX = keyboard_keys[i];
+  }
+  UEINTX = 0x3A;
+  keyboard_idle_count = 0;
+  SREG = intr_state;
+}
+
+void usb_keyboard_release(void)
+{
+  uint8_t i;
+  keyboard_modifier_keys = 0;
+  for(i=0;i<6;i++)
+    keyboard_keys[i] = 0;
+  usb_keyboard_send();
+}
 
 /**************************************************************************
  *
@@ -496,37 +653,55 @@ void usb_debug_flush_output(void)
 //
 ISR(USB_GEN_vect)
 {
-	uint8_t intbits, t;
+  uint8_t intbits, t;
+  static uint8_t div4=0;
 
   intbits = UDINT;
   UDINT = 0;
   if (intbits & (1<<EORSTI)) 
   {
-		UENUM = 0;
-		UECONX = _BV(EPEN);;
-		UECFG0X = EP_TYPE_CONTROL;
-		UECFG1X = EP_SIZE(ENDPOINT0_SIZE) | EP_SINGLE_BUFFER;
-		UEIENX = (1<<RXSTPE);
-		usb_configuration = 0;
+    UENUM = 0;
+    UECONX = _BV(EPEN);;
+    UECFG0X = EP_TYPE_CONTROL;
+    UECFG1X = EP_SIZE(ENDPOINT0_SIZE) | EP_SINGLE_BUFFER;
+    UEIENX = (1<<RXSTPE);
+    usb_configuration = 0;
   }
-	if ((intbits & (1<<SOFI)) && usb_configuration) 
+  if ((intbits & (1<<SOFI)) && usb_configuration) 
   {
-		t = debug_flush_timer;
-		if (t) {
-			debug_flush_timer = -- t;
-			if (!t) {
-				UENUM = DEBUG_TX_ENDPOINT;
-				while ((UEINTX & (1<<RWAL))) {
-					UEDATX = 0;
-				}
-				UEINTX = 0x3A;
-			}
-		}
-		t = rx_timeout_count;
-		if (t) rx_timeout_count = --t;
-		t = tx_timeout_count;
-		if (t) tx_timeout_count = --t;
-	}
+    t = debug_flush_timer;
+    if (t) {
+      debug_flush_timer = -- t;
+      if (!t) {
+        UENUM = DEBUG_TX_ENDPOINT;
+        while ((UEINTX & (1<<RWAL))) {
+          UEDATX = 0;
+        }
+        UEINTX = 0x3A;
+      }
+    }
+    t = rx_timeout_count;
+    if (t) rx_timeout_count = --t;
+    t = tx_timeout_count;
+    if (t) tx_timeout_count = --t;
+
+    if (keyboard_idle_config && (++div4 & 3) == 0) {
+      UENUM = KEYBOARD_ENDPOINT;
+      if (UEINTX & (1<<RWAL)) {
+        keyboard_idle_count++;
+        if (keyboard_idle_count == keyboard_idle_config) {
+          keyboard_idle_count = 0;
+          UEDATX = keyboard_modifier_keys;
+          UEDATX = 0;
+          uint8_t i;
+          for (i=0; i<6; i++) {
+            UEDATX = keyboard_keys[i];
+          }
+          UEINTX = 0x3A;
+        }
+      }
+    }
+  }
 }
 
 // Misc functions to wait for ready and send/receive packets
@@ -738,6 +913,54 @@ ISR(USB_COM_vect)
         } while (len || n == ENDPOINT0_SIZE);
         return;
       } 
+    }
+    if (wIndex == KEYBOARD_INTERFACE) {
+      if (bmRequestType == 0xA1) {
+        if (bRequest == HID_GET_REPORT) {
+          usb_wait_in_ready();
+          UEDATX = keyboard_modifier_keys;
+          UEDATX = 0;
+          for (i=0; i<6; i++) {
+            UEDATX = keyboard_keys[i];
+          }
+          usb_send_in();
+          return;
+        }
+        if (bRequest == HID_GET_IDLE) {
+          usb_wait_in_ready();
+          UEDATX = keyboard_idle_config;
+          usb_send_in();
+          return;
+        }
+        if (bRequest == HID_GET_PROTOCOL) {
+          usb_wait_in_ready();
+          UEDATX = keyboard_protocol;
+          usb_send_in();
+          return;
+        }
+      }
+      if (bmRequestType == 0x21) {
+        if (bRequest == HID_SET_REPORT) {
+          usb_wait_receive_out();
+          keyboard_leds = UEDATX;
+          usb_ack_out();
+          usb_send_in();
+          return;
+        }
+        if (bRequest == HID_SET_IDLE) {
+          keyboard_idle_config = (wValue >> 8);
+          keyboard_idle_count = 0;
+          //usb_wait_in_ready();
+          usb_send_in();
+          return;
+        }
+        if (bRequest == HID_SET_PROTOCOL) {
+          keyboard_protocol = wValue;
+          //usb_wait_in_ready();
+          usb_send_in();
+          return;
+        }
+      }
     }
   }
   
