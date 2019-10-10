@@ -49,6 +49,38 @@
  *    [0x00 > 0x0F n: 0x36]
  */
 
+/**
+ * Grundig TV remote
+ *   Key              CEC code
+ *    1               0x21
+ *    2               0x22
+ *    3               0x23
+ *    4               0x24
+ *    5               0x25
+ *    6               0x26
+ *    7               0x27
+ *    8               0x28
+ *    9               0x29
+ *    0               0x20
+ *    Repeat          0x09
+ *    EPG             0x53
+ *    P+              0x30
+ *    P-              0x31
+ *    Up              0x01
+ *    Down            0x02
+ *    Left            0x03
+ *    Right           0x05
+ *    Select          0x00
+ *    Back            0x0D
+ *    Info            0x35
+ *    Red/Play/Pause  0x44
+ *    Green/Rewind    0x48
+ *    Yellow/Stop     0x45
+ *    Blue/Forward    0x49
+ *    Txt             0x4c
+ *    Rec             0x4b
+ */
+
 #define DEV_SPY 0
 void cecSpy(const uint8_t st, const uint8_t* data, const uint8_t len);
 
