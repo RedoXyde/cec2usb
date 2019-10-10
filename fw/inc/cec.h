@@ -26,12 +26,12 @@ SOFTWARE.
 #define _CEC_H_
 
 #include <stdint.h>
+#include "cec_protocol.h"
 
 #define CEC_IN  PD2 // INT2n, AIN1, RXD1
 #define CEC_OUT PD3 // INT3n, TXD1
 #define HDP     PD4 // INT5
 
-#define CEC_ADDR_BROADCAST 0xF
 #define CEC_TX_MAX_TRIES     6
 
 #define CEC_DEFAULT           0x00

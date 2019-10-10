@@ -100,7 +100,7 @@ inline void cecBit(uint16_t low, uint16_t high)
   tmrReset();
   _low = low;
   _high = high;
-  
+
   if(low)
   {
     tmr0(low);
@@ -152,7 +152,7 @@ inline enum DecodeResult TimerDecode(void)
 #define CEC_BIT_EOM       8
 #define CEC_BIT_ACK       9
 
-typedef struct 
+typedef struct
 {
   volatile uint8_t   st;
   uint8_t   data[CEC_MSG_BLOCKS];
@@ -167,7 +167,7 @@ typedef struct
 } CEC_msg_t;
 
 #define CEC_MSG_NONE    0x00  // Message is not used
-#define CEC_MSG_START   0x01  // Start bit has been received ! 
+#define CEC_MSG_START   0x01  // Start bit has been received !
 #define CEC_MSG_HEADER  0x02  // Current block is HEADER  (data[0])
 #define CEC_MSG_OPCODE  0x04  // Current block is OPCODE  (data[1], optional)
 #define CEC_MSG_PAYLOAD 0x08  // Current block is PAYLOAD (data[2:15], optional)
@@ -182,34 +182,34 @@ typedef struct
  *      0       : Header block
  *      1       : Opcode block
  *      [2:16]  : Payload block(s)
- * 
+ *
  * A CEC Block is 10 bits long:
  *   [0:7] are data bits, MSB first
- *   8     is the End Of Message bit (EOM). 
+ *   8     is the End Of Message bit (EOM).
  *          When set, the current block is the last one for the CEC message
  *   9     is the Acknowledge bit    (ACK)
- *          Set to 1 by the Initiator (sender). 
+ *          Set to 1 by the Initiator (sender).
  *          For Unicast messages: It is cleared by the Follower (receiver), to acknowledge Block reception
- *                                It is then read by the Initiator. 
+ *                                It is then read by the Initiator.
  *                                  0 indicates a successfull transmission
- *                                  1 indicates an error (or that no device has received the message). 
+ *                                  1 indicates an error (or that no device has received the message).
  *                                    FIXME: What now ?! Stop transmission I guess...
  *          For Broadcast messages: It is cleared by any Follower rejecting the message.
  *                                  It is then read by the Initiator.
  *                                    1 indicates a successful transmission. Next byte can be sent or whatever.
- *                                    0 indicates one or more Followers have rejected the message. 
+ *                                    0 indicates one or more Followers have rejected the message.
  *                                      FIXME: What now ?!
- * 
+ *
  *  CEC Header Block:
  *    Data bytes are the (logical) addresses:
  *      [0:3] is the Destination address
  *      [4:7] is the Initiator   address
  *    If EOM is set, it's a polling message (used to PING an address).
- *        If the two addresses are the same (Destination == Initiator), 
- *          the msg is used to check that the address is free 
+ *        If the two addresses are the same (Destination == Initiator),
+ *          the msg is used to check that the address is free
  *          in the Logical Addresses allocation step
- * 
- * 
+ *
+ *
  *  CEC Timings:
  *   - Data:
  *     - Start bit is 3.7ms low, 0.8ms high
@@ -218,10 +218,10 @@ typedef struct
  *       - 1 is       0.6ms      1.8ms
  *        => Data bit length is 2.4ms
  *     - Ack must be a 1 bit when TXing
- * 
+ *
  *   - Protocol:
  *     - Arbitration: TODO
- * 
+ *
  *     - CEC line must be free (high) for the duration of (at least):
  *       - 7 data bits if sending a new frame after a previous one
  *       - 5           if sending a new frame after another Initiator
@@ -248,7 +248,7 @@ typedef struct
 {
   uint8_t   addr;
   uint8_t   mode;
-  struct 
+  struct
   {
     uint8_t op;
     cec_cb  cb;
@@ -297,7 +297,7 @@ CEC_device_t _cec_dev;
 
 // *2.4ms
 #define CEC_CNT_AFTER_TX  7 // 16.8ms
-#define CEC_CNT_AFTER_RX  6 // 12.0ms
+#define CEC_CNT_AFTER_RX  5 // 12.0ms
 #define CEC_CNT_AFTER_ERR 3 //  7.2ms
 
 
@@ -338,10 +338,10 @@ void CEC_tx(const uint8_t* data, const uint8_t l, const uint8_t tries)
 
   if(_cec_dev.tx_w >= CEC_TX_QUEUE_SIZE)
     return;
-  
+
   if(len > 16)
     len = 16;
-  
+
   CEC_msg_t *m = &_cec_dev.tx[_cec_dev.tx_w];
   cecMsgReset(m);
     // Set Data
@@ -353,14 +353,19 @@ void CEC_tx(const uint8_t* data, const uint8_t l, const uint8_t tries)
     // Set EOM
   m->eom = 1<<(len-1);
   m->tries = tries;
-  
+
   ++_cec_dev.tx_w;
 
   if(_cec_dev.st == CEC_DEV_FREE)
     cecRestart();
 }
 
-#define DEBUG_CEC_QUEUE 0
+#define DEBUG_CEC_QUEUE     0
+#define DEBUG_CEC_HANDLERS  0
+#define DEBUG_CEC_RX        0
+#define DEBUG_CEC_TX        0
+#define DEBUG_CEC_LINE      0
+#define DEBUG_CEC_ISR       0
 
 void CEC_processQueue(void)
 {
@@ -377,23 +382,37 @@ void CEC_processQueue(void)
     if((m->ack ^ (((uint32_t)1<<len)-1)) != 0)
       st = CEC_MSG_NACKED;
 
-    // TODO Check m->ack, update st accordingly
-
     cec_cb cb = _cec_dev.hdlr;
-
-    uint8_t i=0;
-    for(;i<_cec_dev.nopcodes;i++)
+    if(len > 1)
     {
-      if(_cec_dev.opcodes[i].op == 
-          m->data[CEC_BLOCK_OPCODE]
-        )
+      #if DEBUG_CEC_HANDLERS >= 1
+      dbg_s("Look for Handler for opcode 0x"); dbg_n(m->data[CEC_BLOCK_OPCODE]); dbg_s("... ");
+      #endif
+      uint8_t i=0;
+      for(;i<_cec_dev.nopcodes;i++)
       {
-        cb = _cec_dev.opcodes[i].cb;
-        i = _cec_dev.nopcodes;
+        if(_cec_dev.opcodes[i].op ==
+            m->data[CEC_BLOCK_OPCODE]
+          )
+        {
+          #if DEBUG_CEC_HANDLERS >= 1
+          dbg_s("Found !");
+          #endif
+          cb = _cec_dev.opcodes[i].cb;
+          i = _cec_dev.nopcodes;
+        }
       }
+      #if DEBUG_CEC_HANDLERS >= 1
+      dbg_c('\n');
+      #endif
     }
     if(cb)
+    {
+      #if DEBUG_CEC_HANDLERS >= 1
+      dbg_s("Call callback\n");
+      #endif
       (*cb)(st, m->data, len);
+    }
     ++_cec_dev.rx_r;
   }
 }
@@ -425,15 +444,13 @@ void CEC_setDefaultHandler(cec_cb cb)
 
 void CEC_registerOpcode(const uint8_t op, cec_cb cb)
 {
+  #if DEBUG_CEC_HANDLERS >= 1
+  dbg_s("Register opcode 0x"); dbg_n(op); dbg_c('\n');
+  #endif
   _cec_dev.opcodes[_cec_dev.nopcodes].op = op;
   _cec_dev.opcodes[_cec_dev.nopcodes].cb = cb;
   ++_cec_dev.nopcodes;
 }
-
-#define DEBUG_CEC_RX 0
-#define DEBUG_CEC_TX 0
-#define DEBUG_CEC_LINE 0
-#define DEBUG_CEC_ISR 0
 
 void cecRestart(void)
 {
@@ -507,13 +524,13 @@ ISR(INT2_vect)
     dbg_c('F');
     #endif
     if(_cec_dev.st == CEC_DEV_FREE ||
-       _cec_dev.st == CEC_DEV_PENDING 
+       _cec_dev.st == CEC_DEV_PENDING
       )
       cecBit(0,TIMEOUT);
-    
+
     //else if(_cec_dev.st < CEC_DEV_RX_START) // TXing
     //  return;
-    
+
     tmrReset();
     if(_cec_dev.st == CEC_DEV_RX_NACK)
     {
@@ -522,7 +539,7 @@ ISR(INT2_vect)
       #endif
       cecBit(DATA_H_AVG,DATA_LEN);
       _cec_dev.st = CEC_DEV_RX;
-    } 
+    }
     else if(_cec_dev.st == CEC_DEV_RX_ACK)
     {
       #if DEBUG_CEC_RX >= 2
@@ -544,7 +561,7 @@ ISR(INT2_vect)
   if(result == BIT_Start)
   {
     if(_cec_dev.st == CEC_DEV_FREE ||
-       _cec_dev.st == CEC_DEV_PENDING 
+       _cec_dev.st == CEC_DEV_PENDING
       )
     {
       #if DEBUG_CEC_RX >= 2
@@ -557,7 +574,7 @@ ISR(INT2_vect)
     }
     else if(_cec_dev.st == CEC_DEV_TX_START)
       return;
-      
+
     dbg_c('S'); dbg_n(_cec_dev.st);
     _cec_dev.st = CEC_DEV_BITT_ERR;
     return cecWaitAndRestart(CEC_CNT_AFTER_ERR);
@@ -572,8 +589,8 @@ ISR(INT2_vect)
     dbg_c('x'); dbg_n(_cec_dev.st);
     _cec_dev.st = CEC_DEV_BITT_ERR;
     return cecWaitAndRestart(CEC_CNT_AFTER_ERR);
-  } 
-  
+  }
+
   if(_cec_dev.st < CEC_DEV_RX_START) // TXing, check value
   {
     uint16_t tmr0v = tmr0Get();
@@ -586,24 +603,42 @@ ISR(INT2_vect)
       return cecWaitAndRestart(CEC_CNT_AFTER_ERR);
     }
     // Getting here means the receiver has (N)ACKED
-    if(_cec_dev.st == CEC_DEV_TX_ACK) 
+    if(_cec_dev.st == CEC_DEV_TX_ACK)
     {
       //dbg_n(result);
-      if(result == BIT_L && 
-          (cecMsgRxAddr(_cec_msg) != CEC_ADDR_BROADCAST)
-        )
+      if((cecMsgRxAddr(_cec_msg) != CEC_ADDR_BROADCAST))
       {
-        #if DEBUG_CEC_TX >= 2
-        dbg_c('A');
-        #endif
-        _cec_dev.st = CEC_DEV_TX_ACKED;
+        if(result == BIT_L)
+        {
+          #if DEBUG_CEC_TX >= 2
+          dbg_c('A');
+          #endif
+          _cec_dev.st = CEC_DEV_TX_ACKED;
+        }
+        else
+        {
+          #if DEBUG_CEC_TX >= 2
+          dbg_c('N');
+          #endif
+          _cec_dev.st = CEC_DEV_TX_NACKED;
+        }
       }
       else
       {
-        #if DEBUG_CEC_TX >= 2
-        dbg_c('N');
-        #endif
-        _cec_dev.st = CEC_DEV_TX_NACKED;
+        if(result == BIT_H)
+        {
+          #if DEBUG_CEC_TX >= 2
+          dbg_c('A');
+          #endif
+          _cec_dev.st = CEC_DEV_TX_ACKED;
+        }
+        else
+        {
+          #if DEBUG_CEC_TX >= 2
+          dbg_c('N');
+          #endif
+          _cec_dev.st = CEC_DEV_TX_NACKED;
+        }
       }
     }
     return;
@@ -614,7 +649,7 @@ ISR(INT2_vect)
     case CEC_DEV_PENDING:
       break;
     case CEC_DEV_RX_START:
-      _cec_msg.st = CEC_MSG_HEADER; // Meh ? 
+      _cec_msg.st = CEC_MSG_HEADER; // Meh ?
       _cec_dev.st = CEC_DEV_RX;
     case CEC_DEV_RX:
       if(rx_block > CEC_MSG_BLOCKS-1)
@@ -643,10 +678,10 @@ ISR(INT2_vect)
         dbg_c((result&0b1) ? 'E' : 'e');
         #endif
 
-        // EOM bit has been received, Prepare ACK        
-        
+        // EOM bit has been received, Prepare ACK
+
         // Listen only, do not ACK/NACK msg
-        if((_cec_dev.mode & CEC_LISTEN_ONLY) != 0)  
+        if((_cec_dev.mode & CEC_LISTEN_ONLY) != 0)
           break;
 
         // Default is to NACK msg
@@ -683,7 +718,7 @@ ISR(INT2_vect)
         for(;i<_cec_dev.nopcodes;i++)
         {
           // OPCODE is registered, ACK
-          if(_cec_dev.opcodes[i].op == 
+          if(_cec_dev.opcodes[i].op ==
             _cec_msg.data[CEC_BLOCK_OPCODE]
             )
           {
@@ -691,18 +726,20 @@ ISR(INT2_vect)
             break;
           }
         }
-      } // EOM was received ! Next one is ACK 
+      } // EOM was received ! Next one is ACK
       else if(rx_bit == CEC_BIT_ACK)
       {
         uint8_t rx_addr = cecMsgRxAddr(_cec_msg);
         #if DEBUG_CEC_RX >= 2
         dbg_c(result == BIT_L ? 'a' : 'n');
         #endif
-        if(result == BIT_L)
-          _cec_msg.ack |= (0b1)<<rx_block;
-
+        if((rx_addr != CEC_ADDR_BROADCAST && result == BIT_L) || 
+           (rx_addr == CEC_ADDR_BROADCAST && result == BIT_H)
+          )
+            _cec_msg.ack |= (0b1)<<rx_block;
+        
         // Increment block number. Also, reset bit count !
-        _cec_msg.idx = (rx_block+1)<<4; 
+        _cec_msg.idx = (rx_block+1)<<4;
         // Update msg Status, mostly for DEBUG
         if(rx_block == CEC_BLOCK_HEADER)
         {
@@ -723,10 +760,9 @@ ISR(INT2_vect)
           dbg_c('0'+rx_block); // Header received
         #endif
 
-        // EOM was set, Message is complete ! 
+        // EOM was set, Message is complete !
         if(((_cec_msg.eom >> rx_block)&0b1) ||
-           (((_cec_msg.ack >> rx_block)&0b1) == 0 && rx_addr != CEC_ADDR_BROADCAST) || 
-           (((_cec_msg.ack >> rx_block)&0b1) != 0 && rx_addr == CEC_ADDR_BROADCAST)
+           (((_cec_msg.ack >> rx_block)&0b1) == 0)
           )
         {
           #if DEBUG_CEC_RX >= 2
@@ -745,7 +781,7 @@ ISR(INT2_vect)
           if((rx_addr == _cec_dev.addr ||
               rx_addr == CEC_ADDR_BROADCAST ||
               ((_cec_dev.mode & CEC_PROMISCUIOUS) != 0)
-             ) && 
+             ) &&
              (_cec_dev.rx_w < CEC_RX_QUEUE_SIZE)
             )
           {
@@ -754,7 +790,7 @@ ISR(INT2_vect)
             memcpy(&_cec_dev.rx[_cec_dev.rx_w++], &_cec_msg, sizeof(CEC_msg_t));
           }
           return cecWaitAndRestart(CEC_CNT_AFTER_RX);
-          
+
         }
       }
       #if DEBUG_CEC_RX >= 2
@@ -765,7 +801,7 @@ ISR(INT2_vect)
 
     default:
       dbg_c('#'); dbg_n(_cec_dev.st);
-      return;      
+      return;
   }
 }
 /////////////////////////////////////////////////////////////////////////////
@@ -794,12 +830,12 @@ ISR(TIMER1_COMPA_vect)
   #if DEBUG_CEC_ISR >= 1
   dbg_c('B');
   #endif
-  
+
   // Pre-handle this case
   if(_cec_dev.st == CEC_DEV_TX_ACKED)
   {
     #if DEBUG_CEC_TX >= 2
-    //dbg_c('a'); 
+    //dbg_c('a');
     //dbg_n(_cec_msg.st);
     #endif
     _cec_dev.st = _cec_msg.st == CEC_MSG_TXED ? CEC_DEV_TXED : CEC_DEV_TX;
@@ -810,9 +846,9 @@ ISR(TIMER1_COMPA_vect)
     case CEC_DEV_FREE:
     case CEC_DEV_RX:
       return;
-    // If we get here, either now reply or NACK, so that's a NACK
+    // If we get here, either no reply or NACK, so that's a NACK
     case CEC_DEV_TX_ACK:
-    case CEC_DEV_TX_NACKED:          
+    case CEC_DEV_TX_NACKED:
       #if DEBUG_CEC_TX >= 2
       dbg_c('R');
       #endif
@@ -877,14 +913,14 @@ ISR(TIMER1_COMPA_vect)
         #if DEBUG_CEC_TX >= 2
         dbg_c(bit ? 'E' : 'e');
         #endif
-      } // EOM was sent ! Next one is ACK 
+      } // EOM was sent ! Next one is ACK
       else if(tx_bit == CEC_BIT_ACK)
       {
         #if DEBUG_CEC_TX >= 2
         dbg_c('A');
         #endif
         // Increment block number. Also, reset bit count !
-        _cec_msg.idx = (tx_block+1)<<4; 
+        _cec_msg.idx = (tx_block+1)<<4;
         if(tx_block == CEC_BLOCK_HEADER)
         {
           _cec_msg.st  = CEC_MSG_OPCODE;
@@ -929,7 +965,7 @@ ISR(TIMER1_COMPA_vect)
 void cecMsgPrint(CEC_msg_t* m, char eol)
 {
 
-  dbg_s("[0x");   dbg_n(m->data[CEC_BLOCK_HEADER]>>4); 
+  dbg_s("[0x");   dbg_n(m->data[CEC_BLOCK_HEADER]>>4);
   dbg_s(" > 0x"); dbg_n(m->data[CEC_BLOCK_HEADER]&0xF);
   if(m->st != CEC_MSG_START) dbg_c((m->ack & 0b1) ? 'a': 'n');
 

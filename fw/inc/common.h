@@ -6,6 +6,7 @@
 #if DBG
 	#include "print.h"
 	#define dbg_s(s) print(s)
+	#define dbg_p(s) print_s(s)
 	#define dbg_c(c) pchar(c)
 	#define dbg_n(n) phex(n)
 	#define dbg_sn(n) pshex(n)
@@ -13,6 +14,7 @@
 	#define dbg_sn16(n) pshex16(n)
 #else
 	#define dbg_s(s) 
+	#define dbg_p(s)
 	#define dbg_c(c) 
 	#define dbg_n(n)
 	#define dbg_sn(n) 
