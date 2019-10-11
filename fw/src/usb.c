@@ -221,7 +221,7 @@ static const uint8_t PROGMEM config1_descriptor[CONFIG1_DESC_SIZE] = {
   2,                              // bDescriptorType;
   LSB(CONFIG1_DESC_SIZE),         // wTotalLength
   MSB(CONFIG1_DESC_SIZE),
-  2,                              // bNumInterfaces
+  3,                              // bNumInterfaces
   1,                              // bConfigurationValue
   0,                              // iConfiguration
   0xC0,                           // bmAttributes
