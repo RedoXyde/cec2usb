@@ -39,7 +39,7 @@ OPT = 2
 #     Each directory must be seperated by a space.
 #     Use forward slashes for directory separators.
 #     For a directory that has spaces, enclose it in quotes.
-EXTRAINCDIRS = inc/
+EXTRAINCDIRS = inc/ ws2811/
 
 # Compiler flag to set the C Standard level.
 #     c89   = "ANSI" C

@@ -272,9 +272,28 @@ void cecKeyUp(const uint8_t st, const uint8_t* data, const uint8_t len)
   usb_keyboard_release();
 }
 
+
+// Define the port at which the signal will be sent. The port needs to
+// be known at compilation time, the pin (0-7) can be chosen at run time.
+#define WS2811_DDR  DDRB
+#define WS2811_PORT PORTB
+#define WS2811_IO   PB1
+
+// send RGB in R,G,B order instead of the standard WS2811 G,R,B order.
+// Most ws2811 LED strips take their colors in GRB order, while some LED strings
+// take them in RGB. Default is GRB, define this symbol for RGB.
+//#define STRAIGHT_RGB
+
+#include "ws2811/ws2811.h"
+#include <avr/interrupt.h>
+
+#define WS2811_NB_LEDS 99
+
+uint8_t _leds[WS2811_NB_LEDS*3];
+
 int main(void)
 {
-
+  DDRD |= _BV(7);
   CPU_PRESCALE(1);            // Run at 8MHz
   usb_init();
   while (!usb_configured());  // Loop until connected
@@ -324,9 +343,39 @@ int main(void)
     dbg_s("Ready, addr 0x"); dbg_n(addr); dbg_c('\n');
   #endif
   
+  WS2811_DDR |= _BV(WS2811_IO);
+
+  uint16_t _leds_usb_idx=0;
   while(1)
   {
     CEC_processQueue();
+
+    uint8_t usb[32],i;
+    uint8_t n = usb_rawhid_recv(usb,10);
+    if(n && _leds_usb_idx < WS2811_NB_LEDS*3)
+    {
+      /*dbg_n(n); dbg_c('/');
+      for(i=0;i<n;i++)
+        dbg_n(usb[i]);
+      dbg_c('\n');
+      */
+
+      i = _leds_usb_idx == 0 ? 1 : 0;
+      for(;i<n;i++)
+      {
+        _leds[_leds_usb_idx] = usb[i];
+        if(++_leds_usb_idx >= WS2811_NB_LEDS*3)
+        {
+          _leds_usb_idx = 0;
+          if(!CEC_isIdle())
+            break;
+          cli();
+          ws2811_send(&_leds,WS2811_NB_LEDS,WS2811_IO);
+          sei();
+          break;
+        }
+      }      
+    }
   }
 }
 
