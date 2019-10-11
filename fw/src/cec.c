@@ -240,9 +240,9 @@ void cecMsgPrint(CEC_msg_t* m, char eol);
 
 CEC_msg_t _cec_msg;
 
-#define CEC_RX_QUEUE_SIZE 16
-#define CEC_TX_QUEUE_SIZE 8
-#define CEC_OPCODES_SIZE  32
+#define CEC_RX_QUEUE_SIZE 12
+#define CEC_TX_QUEUE_SIZE 6
+#define CEC_OPCODES_SIZE  16
 
 typedef struct
 {
@@ -300,6 +300,10 @@ CEC_device_t _cec_dev;
 #define CEC_CNT_AFTER_RX  5 // 12.0ms
 #define CEC_CNT_AFTER_ERR 3 //  7.2ms
 
+uint8_t CEC_isIdle(void)
+{
+  return _cec_dev.st == CEC_DEV_FREE;
+}
 
 void CEC_Init(void)
 {

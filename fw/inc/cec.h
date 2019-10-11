@@ -42,6 +42,7 @@ SOFTWARE.
 #define CEC_HWADDR_LEN 4
 
 void CEC_Init(void);
+uint8_t CEC_isIdle(void);
 void CEC_setMode(const uint8_t m);
 void CEC_setHWAddr(const uint8_t addr[CEC_HWADDR_LEN]);
 int8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll);
