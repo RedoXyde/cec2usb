@@ -2,6 +2,7 @@
 #define _COM_h
 
 #define DBG 1
+//#define V01
 
 #if DBG
 	#include "print.h"
@@ -22,9 +23,18 @@
 	#define dbg_sn16(n)
 #endif
 
+#ifdef V01
+	#define LED PD7
+	#define ILed DDRD  |= _BV(LED)
+	#define TLed PORTD ^= _BV(LED)
+	#define SLed PORTD |= _BV(LED)
+	#define CLed PORTD &= ~_BV(LED)
+#else
+	#define LED PB7
+	#define ILed DDRB  |= _BV(LED)
+	#define TLed PORTB ^= _BV(LED)
+	#define SLed PORTB |= _BV(LED)
+	#define CLed PORTB &= ~_BV(LED)
+#endif
 
-#define LED PD7
-#define TLed PORTD ^= _BV(LED)
-#define SLed PORTD |= _BV(LED)
-#define CLed PORTD &= ~_BV(LED)
 #endif

@@ -1,9 +1,12 @@
 #include <string.h>
+#include <avr/interrupt.h>
+
 #include "common.h"
 #include "main.h"
 #include "usb.h"
 #include "usb_keyboard.h"
-#include "cec.h"
+
+#define CPU_PRESCALE(n)	(CLKPR = 0x80, CLKPR = (n))
 
 /**
  * Atmega32u2:
@@ -118,15 +121,124 @@ const cec_key_map_t _cec_keys_mappings[CEC_KEYS_KBD_MAPPINGS_NB] =
   { .cec = 0x4b, .kbd = KEY_PRINTSCREEN },
 };
 
-#define DEV_SPY 0
+uint16_t _cec_active_src = 0x000;
+
+void cecKeyUp(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecKeyDown(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecSetMenuLanguage(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecStandBy(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecActiveSource(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecRequestActiveSource(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecSetStreamPath(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecRoutingChange(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecReportPowerStatus(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecGivePowerStatus(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecGiveOSDName(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecReportPhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecGivePhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecSpy(const uint8_t st, const uint8_t* data, const uint8_t len);
 
-#define CEC_ADDRS     { CEC_ADDR_PLAYBACK_1, CEC_ADDR_PLAYBACK_2, CEC_ADDR_PLAYBACK_3 }
-#define CEC_TYPE      CEC_OPC_DEVICE_TYPE_PLAYBACK
-#define CEC_PHYSADDR  0x2000
-#define CEC_NAME      "ArkHome"
+int main(void)
+{
+  CPU_PRESCALE(1);            // Run at 8MHz
+  ILed;
+  SLed;
 
-uint16_t _cec_active_src = 0x000;
+  usb_init();
+  while (!usb_configured());  // Loop until connected
+  _delay_ms(1500);
+  CLed;
+
+  CEC_Init();
+  #if DEV_SPY
+    CEC_setMode(CEC_LISTEN_ONLY|CEC_PROMISCUIOUS|CEC_ALLOW_ALL_OPCODES);
+    CEC_setDefaultHandler(&cecSpy);
+  #else
+    CEC_setMode(CEC_DEFAULT); // CEC_ALLOW_ALL_OPCODES);
+    uint8_t addrs[3] = CEC_ADDRS, addr=0;
+    uint8_t i=0;
+    for(;i<3;i++)
+    {
+      dbg_s("Try address 0x"); dbg_n(addrs[i]); dbg_s(": ");
+      if((addr = CEC_registerLogicalAddr(CEC_ADDR_PLAYBACK_1,0)) >= 0)
+      {
+        dbg_s("Ok\n");
+        break;
+      }
+    }
+    // FIXME Handle all addresses failed
+
+    // Registering OPCODES
+        // Unicast
+    CEC_registerOpcode(CEC_OPC_GIVE_PHYSICAL_ADDRESS    , &cecGivePhysAddr);
+    CEC_registerOpcode(CEC_OPC_GIVE_OSD_NAME            , &cecGiveOSDName);
+    CEC_registerOpcode(CEC_OPC_GIVE_DEVICE_POWER_STATUS , &cecGivePowerStatus);
+    CEC_registerOpcode(CEC_OPC_REPORT_POWER_STATUS      , &cecReportPowerStatus);
+        // Broadcast
+    CEC_registerOpcode(CEC_OPC_REQUEST_ACTIVE_SOURCE    , &cecRequestActiveSource);
+    CEC_registerOpcode(CEC_OPC_ROUTING_CHANGE           , &cecRoutingChange);
+
+    CEC_registerOpcode(CEC_OPC_REPORT_PHYSICAL_ADDRESS  , &cecReportPhysAddr);
+    CEC_registerOpcode(CEC_OPC_ACTIVE_SOURCE            , &cecActiveSource);
+    CEC_registerOpcode(CEC_OPC_SET_STREAM_PATH          , &cecSetStreamPath);
+
+    CEC_registerOpcode(CEC_OPC_SET_MENU_LANGUAGE        , &cecSetMenuLanguage);
+    CEC_registerOpcode(CEC_OPC_STANDBY                  , &cecStandBy);
+        // Fallback to default handler for broadcasted messages
+    CEC_setDefaultHandler(&cecSpy); 
+      // Keys
+    CEC_registerOpcode(CEC_OPC_USER_CONTROL_PRESSED     , &cecKeyDown);
+    CEC_registerOpcode(CEC_OPC_USER_CONTROL_RELEASED    , &cecKeyUp);
+
+    dbg_s("Ready, addr 0x"); dbg_n(addr); dbg_c('\n');
+  #endif
+
+  // Init Leds
+  uint8_t _leds[WS2811_NB_LEDS*3];
+  WS2811_DDR |= _BV(WS2811_IO);
+  uint16_t _leds_usb_idx;
+  for(_leds_usb_idx=0;_leds_usb_idx<WS2811_NB_LEDS*3-3;_leds_usb_idx+=3)
+    _leds[_leds_usb_idx]   = 0x00;  // G
+    _leds[_leds_usb_idx+1] = 0x00;  // R
+    _leds[_leds_usb_idx+2] = 0x00;  // B
+
+  cli();
+  ws2811_send(&_leds,WS2811_NB_LEDS,WS2811_IO);
+  sei();
+  _leds_usb_idx=0;
+
+  while(1)
+  {
+    CEC_processQueue();
+
+    uint8_t usb[32],i;
+    uint8_t n = usb_rawhid_recv(usb,10);
+    if(n && _leds_usb_idx < WS2811_NB_LEDS*3)
+    {
+      /*dbg_n(n); dbg_c('/');
+      for(i=0;i<n;i++)
+        dbg_n(usb[i]);
+      dbg_c('\n');
+      */
+
+      i = _leds_usb_idx == 0 ? 1 : 0;
+      for(;i<n;i++)
+      {
+        _leds[_leds_usb_idx] = usb[i];
+        if(++_leds_usb_idx >= WS2811_NB_LEDS*3)
+        {
+          _leds_usb_idx = 0;
+          if(!CEC_isIdle())
+            break;
+          cli();
+          ws2811_send(&_leds,WS2811_NB_LEDS,WS2811_IO);
+          sei();
+          break;
+        }
+      }      
+    }
+  }
+}
 
 void cecGivePhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
@@ -270,113 +382,6 @@ void cecKeyUp(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   dbg_s("< KeyUp\n");
   usb_keyboard_release();
-}
-
-
-// Define the port at which the signal will be sent. The port needs to
-// be known at compilation time, the pin (0-7) can be chosen at run time.
-#define WS2811_DDR  DDRB
-#define WS2811_PORT PORTB
-#define WS2811_IO   PB1
-
-// send RGB in R,G,B order instead of the standard WS2811 G,R,B order.
-// Most ws2811 LED strips take their colors in GRB order, while some LED strings
-// take them in RGB. Default is GRB, define this symbol for RGB.
-//#define STRAIGHT_RGB
-
-#include "ws2811/ws2811.h"
-#include <avr/interrupt.h>
-
-#define WS2811_NB_LEDS 99
-
-uint8_t _leds[WS2811_NB_LEDS*3];
-
-int main(void)
-{
-  DDRD |= _BV(7);
-  CPU_PRESCALE(1);            // Run at 8MHz
-  usb_init();
-  while (!usb_configured());  // Loop until connected
-  _delay_ms(1500);
-
-  CEC_Init();
-  #if DEV_SPY
-    CEC_setMode(CEC_LISTEN_ONLY|CEC_PROMISCUIOUS|CEC_ALLOW_ALL_OPCODES);
-    CEC_setDefaultHandler(&cecSpy);
-  #else
-    CEC_setMode(CEC_DEFAULT); // CEC_ALLOW_ALL_OPCODES);
-    uint8_t addrs[3] = CEC_ADDRS, addr;
-    uint8_t i=0;
-    for(;i<3;i++)
-    {
-      dbg_s("Try address 0x"); dbg_n(addrs[i]); dbg_s(": ");
-      if((addr = CEC_registerLogicalAddr(CEC_ADDR_PLAYBACK_1,0)) >= 0)
-      {
-        dbg_s("Ok\n");
-        break;
-      }
-    }
-    // FIXME Handle all addresses failed
-
-    // Registering OPCODES
-        // Unicast
-    CEC_registerOpcode(CEC_OPC_GIVE_PHYSICAL_ADDRESS    , &cecGivePhysAddr);
-    CEC_registerOpcode(CEC_OPC_GIVE_OSD_NAME            , &cecGiveOSDName);
-    CEC_registerOpcode(CEC_OPC_GIVE_DEVICE_POWER_STATUS , &cecGivePowerStatus);
-    CEC_registerOpcode(CEC_OPC_REPORT_POWER_STATUS      , &cecReportPowerStatus);
-        // Broadcast
-    CEC_registerOpcode(CEC_OPC_REQUEST_ACTIVE_SOURCE    , &cecRequestActiveSource);
-    CEC_registerOpcode(CEC_OPC_ROUTING_CHANGE           , &cecRoutingChange);
-
-    CEC_registerOpcode(CEC_OPC_REPORT_PHYSICAL_ADDRESS  , &cecReportPhysAddr);
-    CEC_registerOpcode(CEC_OPC_ACTIVE_SOURCE            , &cecActiveSource);
-    CEC_registerOpcode(CEC_OPC_SET_STREAM_PATH          , &cecSetStreamPath);
-
-    CEC_registerOpcode(CEC_OPC_SET_MENU_LANGUAGE        , &cecSetMenuLanguage);
-    CEC_registerOpcode(CEC_OPC_STANDBY                  , &cecStandBy);
-        // Fallback to default handler for broadcasted messages
-    CEC_setDefaultHandler(&cecSpy); 
-      // Keys
-    CEC_registerOpcode(CEC_OPC_USER_CONTROL_PRESSED     , &cecKeyDown);
-    CEC_registerOpcode(CEC_OPC_USER_CONTROL_RELEASED    , &cecKeyUp);
-
-    dbg_s("Ready, addr 0x"); dbg_n(addr); dbg_c('\n');
-  #endif
-  
-  WS2811_DDR |= _BV(WS2811_IO);
-
-  uint16_t _leds_usb_idx=0;
-  while(1)
-  {
-    CEC_processQueue();
-
-    uint8_t usb[32],i;
-    uint8_t n = usb_rawhid_recv(usb,10);
-    if(n && _leds_usb_idx < WS2811_NB_LEDS*3)
-    {
-      /*dbg_n(n); dbg_c('/');
-      for(i=0;i<n;i++)
-        dbg_n(usb[i]);
-      dbg_c('\n');
-      */
-
-      i = _leds_usb_idx == 0 ? 1 : 0;
-      for(;i<n;i++)
-      {
-        _leds[_leds_usb_idx] = usb[i];
-        if(++_leds_usb_idx >= WS2811_NB_LEDS*3)
-        {
-          _leds_usb_idx = 0;
-          if(!CEC_isIdle())
-            break;
-          cli();
-          ws2811_send(&_leds,WS2811_NB_LEDS,WS2811_IO);
-          sei();
-          break;
-        }
-      }      
-    }
-  }
 }
 
 void cecSpy(const uint8_t st, const uint8_t* data, const uint8_t len)
