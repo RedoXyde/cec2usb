@@ -6,6 +6,9 @@
 void usb_init(void);      // initialize everything
 uint8_t usb_configured(void);    // is the USB port configured
 int8_t usb_rawhid_recv(uint8_t *buffer, uint8_t timeout);  // receive a packet, with timeout
+void usb_rawhid_set_feature_report_buffer(uint8_t *buffer, uint16_t len);
+int8_t usb_rawhid_feature_report_available(void);
+void usb_rawhid_enable_feature_report(void);
 int8_t usb_rawhid_send(const uint8_t *buffer, uint8_t timeout); // send a packet, with timeout
 
 int8_t usb_debug_putchar(uint8_t c);  // transmit a character

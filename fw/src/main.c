@@ -194,7 +194,7 @@ int main(void)
   #endif
 
   // Init Leds
-  uint8_t _leds[WS2811_NB_LEDS*3];
+  volatile uint8_t _leds[WS2811_NB_LEDS*3];
   WS2811_DDR |= _BV(WS2811_IO);
   uint16_t _leds_usb_idx;
   for(_leds_usb_idx=0;_leds_usb_idx<WS2811_NB_LEDS*3-3;_leds_usb_idx+=3)
@@ -207,36 +207,27 @@ int main(void)
   sei();
   _leds_usb_idx=0;
 
+  usb_rawhid_set_feature_report_buffer(&_leds,WS2811_NB_LEDS*3);
+
   while(1)
   {
     CEC_processQueue();
 
-    uint8_t usb[32],i;
-    uint8_t n = usb_rawhid_recv(usb,10);
-    if(n && _leds_usb_idx < WS2811_NB_LEDS*3)
+    if(usb_rawhid_feature_report_available() > -1 && CEC_isIdle())
     {
-      /*dbg_n(n); dbg_c('/');
-      for(i=0;i<n;i++)
-        dbg_n(usb[i]);
+      //dbg_s("Got Feature report\n");
+      cli();
+      ws2811_send(&_leds,WS2811_NB_LEDS,WS2811_IO);
+      sei();
+      /*
+      uint16_t i;
+      for(i=0;i<WS2811_NB_LEDS*3;i++)
+        dbg_n(_leds[i]);
       dbg_c('\n');
       */
-
-      i = _leds_usb_idx == 0 ? 1 : 0;
-      for(;i<n;i++)
-      {
-        _leds[_leds_usb_idx] = usb[i];
-        if(++_leds_usb_idx >= WS2811_NB_LEDS*3)
-        {
-          _leds_usb_idx = 0;
-          if(!CEC_isIdle())
-            break;
-          cli();
-          ws2811_send(&_leds,WS2811_NB_LEDS,WS2811_IO);
-          sei();
-          break;
-        }
-      }      
+      usb_rawhid_enable_feature_report();
     }
+    _delay_ms(10);
   }
 }
 

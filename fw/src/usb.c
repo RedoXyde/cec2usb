@@ -26,7 +26,7 @@
 
 #define USB_PRIVATE_INCLUDE
 #include "usb.h"
-
+#include "common.h"
 /**************************************************************************
  *
  *  Configurable Options
@@ -89,10 +89,10 @@
 
 static const uint8_t PROGMEM endpoint_config_table[] = 
 {
-  1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(RAWHID_TX_SIZE) | RAWHID_TX_BUFFER,
-  1, EP_TYPE_INTERRUPT_OUT, EP_SIZE(RAWHID_RX_SIZE) | RAWHID_RX_BUFFER,
-  1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(KEYBOARD_SIZE) | KEYBOARD_BUFFER,
-  1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(DEBUG_TX_SIZE) | DEBUG_TX_BUFFER,
+  1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(RAWHID_TX_SIZE) | RAWHID_TX_BUFFER,   // to PC
+  1, EP_TYPE_INTERRUPT_OUT, EP_SIZE(RAWHID_RX_SIZE) | RAWHID_RX_BUFFER,   // from PC
+  1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(KEYBOARD_SIZE) | KEYBOARD_BUFFER,     // to PC
+  1, EP_TYPE_INTERRUPT_IN,  EP_SIZE(DEBUG_TX_SIZE) | DEBUG_TX_BUFFER,     // to PC
   0,
 };
 
@@ -517,6 +517,28 @@ int8_t usb_rawhid_send(const uint8_t *buffer, uint8_t timeout)
   return i;
 }
 
+volatile uint8_t *_feature_report_buffer = 0;
+volatile uint16_t _feature_report_length = 0;
+
+void usb_rawhid_set_feature_report_buffer(uint8_t *buffer, uint16_t len)
+{
+  if(len > 1024)
+    return;
+  _feature_report_buffer = buffer;
+  _feature_report_length = len;
+  
+}
+
+int8_t usb_rawhid_feature_report_available(void)
+{
+  return (_feature_report_length & 0x8000) ? 0 : -1;
+}
+
+void usb_rawhid_enable_feature_report(void)
+{
+  _feature_report_length &= ~0x8000;
+}
+
 /* transmit a character.  0 returned on success, -1 on error */
 int8_t usb_debug_putchar(uint8_t c)
 {
@@ -731,7 +753,7 @@ ISR(USB_COM_vect)
   uint8_t intbits;
   const uint8_t *list;
   const uint8_t *cfg;
-  uint8_t i, n, len, en;
+  uint16_t i, n, len, en;
   uint8_t bmRequestType=0;
   uint8_t bRequest=0;
   uint16_t wValue;
@@ -754,7 +776,7 @@ ISR(USB_COM_vect)
     wLength = UEDATX;
     wLength |= (UEDATX << 8);
     UEINTX = ~((1<<RXSTPI) | (1<<RXOUTI) | (1<<TXINI));
-    if (bRequest == GET_DESCRIPTOR) 
+    if (bRequest == GET_DESCRIPTOR)                         // 0x06
     {
       list = (const uint8_t *)descriptor_list;
       for (i=0; ; i++) 
@@ -801,7 +823,7 @@ ISR(USB_COM_vect)
         usb_send_in();
       } while (len || n == ENDPOINT0_SIZE);
       return;
-                }
+    }
     if (bRequest == SET_ADDRESS) 
     {
       usb_send_in();
@@ -873,8 +895,35 @@ ISR(USB_COM_vect)
         return;
       }
     }
-    if(bRequest == HID_SET_REPORT && bmRequestType == 0x21)
+    if(bRequest == HID_SET_REPORT && bmRequestType == 0x21) // from Host
     {
+      if((wValue >> 8) == 0x03)                               // HID_REPORT_TYPE_FEATURE
+      {
+        //dbg_n16(wLength);
+        //dbg_c(' ');
+        //dbg_n16(_feature_report_length);
+        //dbg_c('\n');
+        if(wLength != _feature_report_length)
+          return;
+        len = wLength;
+        //dbg_n16(len);
+        //return;
+        uint16_t t=0;
+        do 
+        {
+          n = len < ENDPOINT0_SIZE ? len : ENDPOINT0_SIZE;
+          usb_wait_receive_out();
+          // ignore incoming bytes
+          for(i=0;i<n;i++)
+            _feature_report_buffer[t++] = UEDATX;
+          usb_ack_out();
+          len -= n;
+        } while (len);
+        usb_wait_in_ready();
+        usb_send_in();
+        _feature_report_length |= 0x8000;
+        return;
+      }
       if (wIndex == RAWHID_INTERFACE)
       {
         len = wLength;
