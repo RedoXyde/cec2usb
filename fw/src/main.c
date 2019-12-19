@@ -227,7 +227,7 @@ int main(void)
       */
       usb_rawhid_enable_feature_report();
     }
-    _delay_ms(10);
+    //_delay_ms(1);
   }
 }
 
