@@ -12,6 +12,7 @@ TARGET = CEC2Usb
 SRC =	src/main.c
 SRC += src/print.c src/usb.c
 SRC += src/cec.c src/handlers.c
+SRC += src/si2c.c src/edid.c
 
 # MCU name, you MUST set this to match the board you are using.
 MCU = atmega32u2

@@ -1,5 +1,5 @@
-#ifndef _COM_h
-#define _COM_h
+#pragma once
+#include <stdint.h>
 
 #define DBG 1
 //#define V01
@@ -41,5 +41,3 @@
 #define CEC_OWN_TYPE      CEC_OPC_DEVICE_TYPE_RECORDER
 #define CEC_OWN_PHYSADDR  0x1000
 #define CEC_OWN_NAME      "ArkHome"
-
-#endif

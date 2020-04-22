@@ -22,10 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#ifndef _CEC_H_
-#define _CEC_H_
+#pragma once
 
-#include <stdint.h>
+#include "common.h"
 #include "cec_protocol.h"
 
 #define CEC_IN  PD2 // INT2n, AIN1, RXD1
@@ -54,5 +53,3 @@ void CEC_setDefaultHandler(cec_cb hdlr);
 
 void CEC_tx(const uint8_t* data, const uint8_t len, const uint8_t tries);
 void CEC_processQueue(void);
-
-#endif
