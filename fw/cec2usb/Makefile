@@ -4,13 +4,14 @@ TARGET = CEC2Usb
 # Fuses
 # avrdude -c usbtiny -p m32u2 -U lfuse:w:0xde:m -U hfuse:w:0xd9:m -U efuse:w:0xf4:m
 
-#TOOLCHAIN_ROOT='/c/_data/home/BM246121/.platformio/packages/toolchain-atmelavr/bin/'
-#AVRDUDE_ROOT = '/c/_data/home/BM246121/.platformio/packages/tool-avrdude/'
+#PIO_ENV_ROOT=/home/redox/
+#TOOLCHAIN_ROOT = $(PIO_ENV_ROOT)'/.platformio/packages/toolchain-atmelavr/bin/'
+#AVRDUDE_ROOT   = $(PIO_ENV_ROOT)'/.platformio/packages/tool-avrdude/'
 
 # List C source files here.
 SRC =	src/main.c
 SRC += src/print.c src/usb.c
-SRC += src/cec.c
+SRC += src/cec.c src/handlers.c
 
 # MCU name, you MUST set this to match the board you are using.
 MCU = atmega32u2
@@ -148,6 +149,8 @@ PROGRAM = $(AVRDUDE_ROOT)avrdude
 REMOVE = rm -f
 REMOVEDIR = rm -rf
 COPY = cp
+DFU  = dfu-programmer
+
 
 # Define Messages
 # English
@@ -215,6 +218,14 @@ gccversion :
 program: $(TARGET).hex
 	$(PROGRAM) -V -c usbtiny -p $(MCU) -U flash:w:$(TARGET).hex
 	#teensy_loader_cli -w -v --mcu=${MCU} $(TARGET).hex
+
+dfu: $(TARGET).hex
+	@until $(DFU) $(MCU) get bootloader-version > /dev/null 2>&1; do\
+		echo "Bootloader not found. Trying again in 2s." ;\
+		sleep 2 ;\
+	done
+	$(DFU) $(MCU) flash $<
+	@$(DFU) $(MCU) start ||	exit 0
 
 # Create final output files (.hex, .eep) from ELF output file.
 %.hex: $(OBJDIR)/%.elf

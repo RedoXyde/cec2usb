@@ -37,4 +37,9 @@
 	#define CLed PORTB &= ~_BV(LED)
 #endif
 
+#define CEC_OWN_ADDRS     { CEC_ADDR_RECORDER_1, CEC_ADDR_PLAYBACK_2, CEC_ADDR_PLAYBACK_3 }
+#define CEC_OWN_TYPE      CEC_OPC_DEVICE_TYPE_RECORDER
+#define CEC_OWN_PHYSADDR  0x1000
+#define CEC_OWN_NAME      "ArkHome"
+
 #endif

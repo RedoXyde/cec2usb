@@ -25,11 +25,4 @@
 
 #define DEV_SPY 0
 
-
-#define CEC_ADDRS     { CEC_ADDR_RECORDER_1, CEC_ADDR_PLAYBACK_2, CEC_ADDR_PLAYBACK_3 }
-#define CEC_TYPE      CEC_OPC_DEVICE_TYPE_RECORDER
-#define CEC_PHYSADDR  0x1000
-#define CEC_NAME      "ArkHome"
-
-
 #endif
