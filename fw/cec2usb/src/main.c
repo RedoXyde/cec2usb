@@ -82,6 +82,14 @@
  *    Blue/Forward    0x49          KEY_F
  *    Txt             0x4c          KEY_TAB
  *    Rec             0x4b          KEY_PRINTSCREEN
+ *
+ */
+
+/**
+ * LG ..Smart.. TV
+ * 
+ * 
+ * 
  */
 
 typedef struct {
@@ -132,10 +140,15 @@ void cecRequestActiveSource(const uint8_t st, const uint8_t* data, const uint8_t
 void cecSetStreamPath(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecRoutingChange(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecReportPowerStatus(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecGiveDeviceVendorID(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecDeviceVendorID(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecGivePowerStatus(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecGiveOSDName(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecReportPhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecGivePhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecVendorCommand(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecGiveDeckStatus(const uint8_t st, const uint8_t* data, const uint8_t len);
+
 void cecSpy(const uint8_t st, const uint8_t* data, const uint8_t len);
 
 int main(void)
@@ -160,7 +173,7 @@ int main(void)
     for(;i<3;i++)
     {
       dbg_s("Try address 0x"); dbg_n(addrs[i]); dbg_s(": ");
-      if((addr = CEC_registerLogicalAddr(CEC_ADDR_PLAYBACK_1,0)) >= 0)
+      if((addr = CEC_registerLogicalAddr(addrs[i],0)) >= 0)
       {
         dbg_s("Ok\n");
         break;
@@ -170,20 +183,26 @@ int main(void)
 
     // Registering OPCODES
         // Unicast
-    CEC_registerOpcode(CEC_OPC_GIVE_PHYSICAL_ADDRESS    , &cecGivePhysAddr);
-    CEC_registerOpcode(CEC_OPC_GIVE_OSD_NAME            , &cecGiveOSDName);
-    CEC_registerOpcode(CEC_OPC_GIVE_DEVICE_POWER_STATUS , &cecGivePowerStatus);
-    CEC_registerOpcode(CEC_OPC_REPORT_POWER_STATUS      , &cecReportPowerStatus);
+    CEC_registerOpcode(CEC_OPC_GIVE_PHYSICAL_ADDRESS    , &cecGivePhysAddr);        // 0x83
+    CEC_registerOpcode(CEC_OPC_GIVE_OSD_NAME            , &cecGiveOSDName);         // 0x46
+    CEC_registerOpcode(CEC_OPC_GIVE_DEVICE_POWER_STATUS , &cecGivePowerStatus);     // 0x8f
+    CEC_registerOpcode(CEC_OPC_REPORT_POWER_STATUS      , &cecReportPowerStatus);   // 0x90
+    CEC_registerOpcode(CEC_OPC_GIVE_DEVICE_VENDOR_ID    , &cecGiveDeviceVendorID);  // 0x8c
+    CEC_registerOpcode(CEC_OPC_VENDOR_COMMAND           , &cecVendorCommand);       // 0x89
+    CEC_registerOpcode(CEC_OPC_GIVE_DECK_STATUS         , &cecGiveDeckStatus);      // 0x1a
+
         // Broadcast
-    CEC_registerOpcode(CEC_OPC_REQUEST_ACTIVE_SOURCE    , &cecRequestActiveSource);
-    CEC_registerOpcode(CEC_OPC_ROUTING_CHANGE           , &cecRoutingChange);
+    CEC_registerOpcode(CEC_OPC_REQUEST_ACTIVE_SOURCE    , &cecRequestActiveSource); // 0x85
+    CEC_registerOpcode(CEC_OPC_ROUTING_CHANGE           , &cecRoutingChange);       // 0x80
 
-    CEC_registerOpcode(CEC_OPC_REPORT_PHYSICAL_ADDRESS  , &cecReportPhysAddr);
-    CEC_registerOpcode(CEC_OPC_ACTIVE_SOURCE            , &cecActiveSource);
-    CEC_registerOpcode(CEC_OPC_SET_STREAM_PATH          , &cecSetStreamPath);
+    CEC_registerOpcode(CEC_OPC_REPORT_PHYSICAL_ADDRESS  , &cecReportPhysAddr);      // 0x84
+    CEC_registerOpcode(CEC_OPC_ACTIVE_SOURCE            , &cecActiveSource);        // 0x82
+    CEC_registerOpcode(CEC_OPC_SET_STREAM_PATH          , &cecSetStreamPath);       // 0x86
 
-    CEC_registerOpcode(CEC_OPC_SET_MENU_LANGUAGE        , &cecSetMenuLanguage);
-    CEC_registerOpcode(CEC_OPC_STANDBY                  , &cecStandBy);
+    CEC_registerOpcode(CEC_OPC_SET_MENU_LANGUAGE        , &cecSetMenuLanguage);     // 0x32
+    CEC_registerOpcode(CEC_OPC_STANDBY                  , &cecStandBy);             // 0x36
+
+    CEC_registerOpcode(CEC_OPC_DEVICE_VENDOR_ID        , &cecDeviceVendorID);       // 0x87
         // Fallback to default handler for broadcasted messages
     CEC_setDefaultHandler(&cecSpy); 
       // Keys
@@ -228,6 +247,62 @@ int main(void)
       usb_rawhid_enable_feature_report();
     }
     //_delay_ms(1);
+  }
+}
+
+void cecGiveDeckStatus(const uint8_t st, const uint8_t* data, const uint8_t len)
+{
+  uint8_t d[3];
+  d[0] = data[0]>>4;
+  d[1] = CEC_OPC_DECK_STATUS;
+  d[2] = 0x20; // CEC_DECK_INFO_OTHER_STATUS_LG
+  CEC_tx(d,5,CEC_TX_MAX_TRIES);
+  dbg_s("< cecGiveDeckStatus: 0x"); dbg_n(d[2]); dbg_c('\n');
+}
+
+
+#define SL_COMMAND_INIT                 0x01
+#define SL_COMMAND_ACK_INIT             0x02
+#define SL_COMMAND_POWER_ON             0x03
+#define SL_COMMAND_CONNECT_REQUEST      0x04
+#define SL_COMMAND_SET_DEVICE_MODE      0x05
+#define SL_COMMAND_REQUEST_RECONNECT    0x0b
+#define SL_COMMAND_REQUEST_POWER_STATUS 0xa0
+
+void cecVendorCommand(const uint8_t st, const uint8_t* data, const uint8_t len)
+{
+  uint8_t d[5],olen=0;
+  d[0] = data[0]>>4;
+  d[1] = CEC_OPC_VENDOR_COMMAND;
+  dbg_s("< cecVendorCommand: 0x"); dbg_n(data[2]); dbg_c(' ');
+  switch(data[2])
+  {
+    case 0x01:      // Init
+      dbg_s("Init");
+      d[2] = 0x02;  // Ack Init
+      d[3] = 0x05;  // HDRRECORDER
+      olen = 4;
+      break;
+    //case 0x02:      // Ack Init
+    //case 0x03:      // Power On    
+    case 0x04:      // Connect request
+      dbg_s("Connect request");
+      d[2] = 0x05;  // Set device mode
+      d[3] = CEC_OPC_DEVICE_TYPE_RECORDER;
+      olen = 4;
+      break;
+    //case 0x05:      // Set Device Mode
+    //case 0x0B:      // Request reconnect
+    //case 0xa0:      // Request Power status
+    default:
+      dbg_s("Unknown vendor command");
+      break;
+  };
+  dbg_c('\n');
+  if(olen)
+  {
+    dbg_s("> cecVendorCommand: 0x"); dbg_n(d[2]); dbg_c('\n');
+    CEC_tx(d,olen,CEC_TX_MAX_TRIES);
   }
 }
 
@@ -280,6 +355,27 @@ void cecReportPowerStatus(const uint8_t st, const uint8_t* data, const uint8_t l
 {
   dbg_s("< ReportPowerStatus from 0x"); dbg_n(data[0]>>4); 
   dbg_s(": 0x"); dbg_n(data[2]); dbg_c('\n');
+}
+
+void cecDeviceVendorID(const uint8_t st, const uint8_t* data, const uint8_t len)
+{
+  dbg_s("< cecDeviceVendorID from 0x"); dbg_n(data[0]>>4);
+  dbg_s(": 0x"); dbg_n(data[2]); 
+  dbg_s(", 0x"); dbg_n(data[3]);
+  dbg_s(", 0x"); dbg_n(data[4]); 
+  dbg_c('\n');
+}
+
+void cecGiveDeviceVendorID(const uint8_t st, const uint8_t* data, const uint8_t len)
+{
+  uint8_t d[5];
+  d[0] = CEC_ADDR_BROADCAST;
+  d[1] = CEC_OPC_DEVICE_VENDOR_ID;
+  d[2] = 0x00;
+  d[3] = 0xE0;
+  d[4] = 0x91;
+  dbg_s("> cecGiveDeviceVendorID\n");
+  CEC_tx(d,5,CEC_TX_MAX_TRIES);
 }
 
 void cecRoutingChange(const uint8_t st, const uint8_t* data, const uint8_t len)
