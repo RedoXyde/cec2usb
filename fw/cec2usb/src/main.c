@@ -111,10 +111,10 @@ int main(void)
       uint8_t i=0;
       for(;i<3;i++)
       {
-        dbg_s("  Try Logcial address 0x"); dbg_n(addrs[i]); dbg_s(": ");
+        //dbg_s("  Try Logcial address 0x"); dbg_n(addrs[i]); dbg_s(": ");
         if((addr = CEC_registerLogicalAddr(addrs[i],0)) >= 0)
         {
-          dbg_s("Ok\n");
+          //dbg_s("Ok\n");
           break;
         }
       }
