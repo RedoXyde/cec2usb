@@ -255,6 +255,8 @@ void cecSetMenuLanguage(const uint8_t st, const uint8_t* data, const uint8_t len
   dbg_s("< SetMenuLanguage "); dbg_p(lang); dbg_c('\n');
 }
 
+uint8_t keyDown = 0x00;
+
 void cecKeyDown(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   uint8_t k = data[2];
@@ -265,8 +267,14 @@ void cecKeyDown(const uint8_t st, const uint8_t* data, const uint8_t len)
     const cec_key_map_t* m = &_cec_keys_mappings[i];
     if(k == m->cec)
     {
-      usb_keyboard_press(0,m->kbd,0);
       dbg_s(" Mapped \n");
+      if(keyDown == m->kbd)
+        return;
+      else if(keyDown)
+        usb_keyboard_release();
+
+      keyDown = m->kbd;
+      usb_keyboard_press(0,m->kbd,0);
       return;
     }
   }
@@ -276,6 +284,7 @@ void cecKeyDown(const uint8_t st, const uint8_t* data, const uint8_t len)
 void cecKeyUp(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   dbg_s("< KeyUp\n");
+  keyDown = 0x00;
   usb_keyboard_release();
 }
 
