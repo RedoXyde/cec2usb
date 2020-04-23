@@ -17,7 +17,7 @@
 void SI2C_Init(void);
 void SI2C_End(void);
 
-void SI2C_Start(void);
+uint8_t SI2C_Start(void);
 void SI2C_Restart(void);
 void SI2C_Stop(void);
 

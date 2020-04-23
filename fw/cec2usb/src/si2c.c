@@ -54,11 +54,14 @@ void SI2C_End(void)
   SI2C_PullDown(SI2C_SCL);
 }
 
-void SI2C_Start(void) 
+uint8_t SI2C_Start(void) 
 {
+  if(!SI2C_isHigh(SI2C_SCL))
+    return 0;
   SI2C_PullDown(SI2C_SDA);  // SDA Low
   SI2CDelay;
   SI2C_PullDown(SI2C_SCL);  // Then, SCL Low
+  return 1;
 }
 
 void SI2C_Restart(void) 
