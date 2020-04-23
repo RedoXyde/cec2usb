@@ -42,16 +42,8 @@ uint8_t SI2C_rBit(void)
 void SI2C_Init(void) 
 {
   // Input, no pullups
-  SI2C_Release(SI2C_SDA); 
-  SI2C_Release(SI2C_SCL);
+  SI2C_Dir  &= ~(_BV(SI2C_SDA) | _BV(SI2C_SCL)); 
   SI2C_Port &= ~(_BV(SI2C_SDA) | _BV(SI2C_SCL));
-}
-
-void SI2C_End(void) 
-{
-  // Output, low
-  SI2C_PullDown(SI2C_SDA); 
-  SI2C_PullDown(SI2C_SCL);
 }
 
 uint8_t SI2C_Start(void) 
