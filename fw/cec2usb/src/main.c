@@ -47,6 +47,8 @@ int main(void)
     CEC_registerOpcode(CEC_OPC_VENDOR_COMMAND           , &cecVendorCommand);       // 0x89
     CEC_registerOpcode(CEC_OPC_GIVE_DECK_STATUS         , &cecGiveDeckStatus);      // 0x1a
 
+    CEC_registerOpcode(CEC_OPC_VENDOR_COMMAND_WITH_ID   , &cecVendorCommandWithID); // 0xa0
+
         // Broadcast
     CEC_registerOpcode(CEC_OPC_REQUEST_ACTIVE_SOURCE    , &cecRequestActiveSource); // 0x85
     CEC_registerOpcode(CEC_OPC_ROUTING_CHANGE           , &cecRoutingChange);       // 0x80
@@ -58,7 +60,7 @@ int main(void)
     CEC_registerOpcode(CEC_OPC_SET_MENU_LANGUAGE        , &cecSetMenuLanguage);     // 0x32
     CEC_registerOpcode(CEC_OPC_STANDBY                  , &cecStandBy);             // 0x36
 
-    CEC_registerOpcode(CEC_OPC_DEVICE_VENDOR_ID        , &cecDeviceVendorID);       // 0x87
+    CEC_registerOpcode(CEC_OPC_DEVICE_VENDOR_ID         , &cecDeviceVendorID);      // 0x87
       // Keys
     CEC_registerOpcode(CEC_OPC_USER_CONTROL_PRESSED     , &cecKeyDown);             // 0x44
     CEC_registerOpcode(CEC_OPC_USER_CONTROL_RELEASED    , &cecKeyUp);               // 0x45

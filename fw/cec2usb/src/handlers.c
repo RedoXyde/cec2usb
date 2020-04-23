@@ -115,6 +115,39 @@ void cecVendorCommand(const uint8_t st, const uint8_t* data, const uint8_t len)
   }
 }
 
+void cecVendorCommandWithID(const uint8_t st, const uint8_t* data, const uint8_t len)
+{
+  uint8_t d[10],olen=0;
+  d[0] = data[0]>>4;
+  d[1] = CEC_OPC_VENDOR_COMMAND_WITH_ID;
+  dbg_s("< cecVendorCommandWithID: len:"); dbg_n(len); dbg_c(' ');
+  
+  // Samsung Vendor ID
+  // IDs and reply found in libcec source, thanks to them
+  if(len >= 5 && data[2] == 0x00 && data[3] == 0x00 && data[4] == 0xf0)
+  {
+    if(len >= 6 && data[5] == 0x23)
+    {
+      // Keep [2:4] as is, reply with Samsung Vendor ID
+      d[2] = data[2]; d[3] = data[3]; d[4] = data[4];
+      d[6] = 0x24;
+      d[7] = 0x00;
+      d[8] = 0x80;
+      olen = 9;
+    }
+    else
+      dbg_s("Unknown Samsung command");
+  }
+  else
+    dbg_s("Unknown vendor ID");
+  dbg_c('\n');
+  if(olen)
+  {
+    dbg_s("> cecVendorCommandWithID: 0x"); dbg_n(d[2]); dbg_c('\n');
+    CEC_tx(d,olen,CEC_TX_MAX_TRIES);
+  }
+}
+
 void cecGivePhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   uint8_t d[5];

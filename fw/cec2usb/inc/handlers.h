@@ -17,6 +17,7 @@ void cecReportPhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len)
 void cecGivePhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecVendorCommand(const uint8_t st, const uint8_t* data, const uint8_t len);
 void cecGiveDeckStatus(const uint8_t st, const uint8_t* data, const uint8_t len);
+void cecVendorCommandWithID(const uint8_t st, const uint8_t* data, const uint8_t len);
 
 void cecSpy(const uint8_t st, const uint8_t* data, const uint8_t len);
 
