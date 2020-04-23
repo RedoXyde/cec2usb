@@ -7,11 +7,13 @@
 
 uint16_t EDID_ReadPhysicalAddress(void)
 {
-  uint8_t b[14] = { 
+  uint8_t b[18] = { 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
   };
   uint8_t n, i;
+
+  SI2C_Init();
   
   //dbg_c('A');
   // Initial check, check EDID header
@@ -22,25 +24,26 @@ uint16_t EDID_ReadPhysicalAddress(void)
     if(b[i] != b[i+7])
       return EDID_ADDR_INVALID;
   //dbg_c('B');
-
-  uint8_t start_addr = 128;
-  n = EDID_Read(start_addr,4,b);
+  
+  uint8_t saddr = 128;
+  n = EDID_Read(saddr,4,b);
   if( n != 4 || 
       b[0] != 0x02 || // Check for CEA EDID extension
       b[2] == 4       // Check for Data Block Collection 
     )
     return EDID_ADDR_INVALID;
   //dbg_c('C');
-  uint8_t end_addr = start_addr+b[2];
-  start_addr += 4;
+  
+  uint8_t eaddr = saddr+b[2];
+  saddr += 4;
   do 
   {  
-    n = EDID_Read(start_addr,1,b);
+    n = EDID_Read(saddr,1,b);
     if(!n) 
       return EDID_ADDR_INVALID;
     uint8_t t = ((b[0]>>5)&0x7),  
             l =  (b[0]&0x1F);
-    ++start_addr;
+    ++saddr;
 
     /*dbg_s(" D");
     
@@ -59,7 +62,7 @@ uint16_t EDID_ReadPhysicalAddress(void)
     if(t == 0b011)
     {
       //dbg_c('E');
-      n = EDID_Read(start_addr,l,b);
+      n = EDID_Read(saddr,l,b);
       if(n!=l)
         return EDID_ADDR_INVALID;
       //for(i=0;i<n;i++)
@@ -70,14 +73,12 @@ uint16_t EDID_ReadPhysicalAddress(void)
       if( b[2] == 0x00 && b[1] == 0x0C && b[0] == 0x03)
       {
         uint16_t addr = ((uint16_t)(b[3])<<8)|b[4];
-        //dbg_s("Addr:");dbg_n16(addr);
         return addr;
       }
     }
-    start_addr +=  l;
-  } while(start_addr < end_addr);
+    saddr +=  l;
+  } while(saddr < eaddr);
 
-  //dbg_s("Z");
   return EDID_ADDR_INVALID;
 }
 
