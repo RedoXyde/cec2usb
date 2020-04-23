@@ -106,14 +106,15 @@ int main(void)
       dbg_n((a>>12)&0xF);dbg_c('.'); dbg_n((a>>8)&0xF);dbg_c('.');
       dbg_n((a>>4)&0xF);dbg_c('.');  dbg_n(a&0xF);
         dbg_s("\n");
-      uint8_t addrs[3] = CEC_OWN_ADDRS, addr=0;
+      uint8_t addrs[3] = CEC_OWN_ADDRS;
+      int8_t addr=0;
       uint8_t i=0;
       for(;i<3;i++)
       {
-        //dbg_s("  Try Logcaddress 0x"); dbg_n(addrs[i]); dbg_s(": ");
+        dbg_s("  Try Logcial address 0x"); dbg_n(addrs[i]); dbg_s(": ");
         if((addr = CEC_registerLogicalAddr(addrs[i],0)) >= 0)
         {
-          //dbg_s("Ok\n");
+          dbg_s("Ok\n");
           break;
         }
       }
