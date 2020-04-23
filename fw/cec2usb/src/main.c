@@ -26,6 +26,7 @@ int main(void)
   while (!usb_configured());  // Loop until connected
   _delay_ms(2000);
   CLed;
+  dbg_s("CEC2Usb start\n");
 
   EDID_Init();
   CEC_Init();
@@ -89,9 +90,16 @@ int main(void)
       //dbg_s("Try to register on CEC Bus\n");
       if(CEC_PhysicalAddr() == CEC_PHYSADDR_INVALID)
       {
-        uint16_t a = EDID_ReadPhysicalAddress(); 
-        CEC_setPhysicalAddr(a != EDID_ADDR_INVALID ? a : CEC_PHYSADDR_INVALID);
-        continue;
+        uint16_t a = EDID_ADDR_INVALID;
+        while(1)
+        {
+          a = EDID_ReadPhysicalAddress(); 
+          if(a != EDID_ADDR_INVALID)
+            break;
+          dbg_c('.');
+          _delay_ms(1000);
+        }
+        CEC_setPhysicalAddr(a);
       }
       uint16_t a = CEC_PhysicalAddr();
       dbg_s("Physical Address: ");
@@ -102,15 +110,15 @@ int main(void)
       uint8_t i=0;
       for(;i<3;i++)
       {
-        dbg_s("  Try address 0x"); dbg_n(addrs[i]); dbg_s(": ");
+        //dbg_s("  Try Logcaddress 0x"); dbg_n(addrs[i]); dbg_s(": ");
         if((addr = CEC_registerLogicalAddr(addrs[i],0)) >= 0)
         {
-          dbg_s("Ok\n");
+          //dbg_s("Ok\n");
           break;
         }
       }
       // FIXME Handle all addresses failed
-      dbg_s("  Ready, addr 0x"); dbg_n(addr); dbg_c('\n');
+      dbg_s("Logical Address: 0x"); dbg_n(addr); dbg_c('\n');
     }
     #endif
 
