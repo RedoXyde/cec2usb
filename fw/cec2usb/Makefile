@@ -220,6 +220,13 @@ program: $(TARGET).hex
 	$(PROGRAM) -V -c usbtiny -p $(MCU) -U flash:w:$(TARGET).hex
 	#teensy_loader_cli -w -v --mcu=${MCU} $(TARGET).hex
 
+dfu_start:
+	@until $(DFU) $(MCU) get bootloader-version > /dev/null 2>&1; do\
+		echo "Bootloader not found. Trying again in 2s." ;\
+		sleep 2 ;\
+	done
+	@$(DFU) $(MCU) start ||	exit 0
+
 dfu: $(TARGET).hex
 	@until $(DFU) $(MCU) get bootloader-version > /dev/null 2>&1; do\
 		echo "Bootloader not found. Trying again in 2s." ;\

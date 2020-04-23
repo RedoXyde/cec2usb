@@ -5,6 +5,7 @@
 #include "main.h"
 #include "usb.h"
 #include "handlers.h"
+#include "edid.h"
 
 #define CPU_PRESCALE(n)	(CLKPR = 0x80, CLKPR = (n))
 
@@ -23,26 +24,17 @@ int main(void)
 
   usb_init();
   while (!usb_configured());  // Loop until connected
+  _delay_ms(2000);
   CLed;
 
+  EDID_Init();
   CEC_Init();
   #if DEV_SPY
     CEC_setMode(CEC_LISTEN_ONLY|CEC_PROMISCUIOUS|CEC_ALLOW_ALL_OPCODES);
     CEC_setDefaultHandler(&cecSpy);
   #else
     CEC_setMode(CEC_DEFAULT); // CEC_ALLOW_ALL_OPCODES);
-    uint8_t addrs[3] = CEC_OWN_ADDRS, addr=0;
-    uint8_t i=0;
-    for(;i<3;i++)
-    {
-      dbg_s("Try address 0x"); dbg_n(addrs[i]); dbg_s(": ");
-      if((addr = CEC_registerLogicalAddr(addrs[i],0)) >= 0)
-      {
-        dbg_s("Ok\n");
-        break;
-      }
-    }
-    // FIXME Handle all addresses failed
+    //CEC_setPhysicalAddr(0x1000); // Force Physical Address to 1.0.0.0
 
     // Registering OPCODES
         // Unicast
@@ -66,13 +58,11 @@ int main(void)
     CEC_registerOpcode(CEC_OPC_STANDBY                  , &cecStandBy);             // 0x36
 
     CEC_registerOpcode(CEC_OPC_DEVICE_VENDOR_ID        , &cecDeviceVendorID);       // 0x87
+      // Keys
+    CEC_registerOpcode(CEC_OPC_USER_CONTROL_PRESSED     , &cecKeyDown);             // 0x44
+    CEC_registerOpcode(CEC_OPC_USER_CONTROL_RELEASED    , &cecKeyUp);               // 0x45
         // Fallback to default handler for broadcasted messages
     CEC_setDefaultHandler(&cecSpy); 
-      // Keys
-    CEC_registerOpcode(CEC_OPC_USER_CONTROL_PRESSED     , &cecKeyDown);
-    CEC_registerOpcode(CEC_OPC_USER_CONTROL_RELEASED    , &cecKeyUp);
-
-    dbg_s("Ready, addr 0x"); dbg_n(addr); dbg_c('\n');
   #endif
 
   // Init Leds
@@ -93,6 +83,37 @@ int main(void)
 
   while(1)
   {
+    #ifndef CEC_SPY
+    if(CEC_Addr() == CEC_ADDR_UNREGISTERED)
+    {
+      //dbg_s("Try to register on CEC Bus\n");
+      if(CEC_PhysicalAddr() == CEC_PHYSADDR_INVALID)
+      {
+        uint16_t a = EDID_ReadPhysicalAddress(); 
+        CEC_setPhysicalAddr(a != EDID_ADDR_INVALID ? a : CEC_PHYSADDR_INVALID);
+        continue;
+      }
+      uint16_t a = CEC_PhysicalAddr();
+      dbg_s("Physical Address: ");
+      dbg_n((a>>12)&0xF);dbg_c('.'); dbg_n((a>>8)&0xF);dbg_c('.');
+      dbg_n((a>>4)&0xF);dbg_c('.');  dbg_n(a&0xF);
+        dbg_s("\n");
+      uint8_t addrs[3] = CEC_OWN_ADDRS, addr=0;
+      uint8_t i=0;
+      for(;i<3;i++)
+      {
+        dbg_s("  Try address 0x"); dbg_n(addrs[i]); dbg_s(": ");
+        if((addr = CEC_registerLogicalAddr(addrs[i],0)) >= 0)
+        {
+          dbg_s("Ok\n");
+          break;
+        }
+      }
+      // FIXME Handle all addresses failed
+      dbg_s("  Ready, addr 0x"); dbg_n(addr); dbg_c('\n');
+    }
+    #endif
+
     CEC_processQueue();
 
     if(usb_rawhid_feature_report_available() > -1 && CEC_isIdle())

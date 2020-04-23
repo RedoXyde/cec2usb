@@ -102,12 +102,13 @@ void cecVendorCommand(const uint8_t st, const uint8_t* data, const uint8_t len)
 void cecGivePhysAddr(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   uint8_t d[5];
+  uint16_t addr = CEC_PhysicalAddr();
   d[0] = CEC_ADDR_BROADCAST;
   d[1] = CEC_OPC_REPORT_PHYSICAL_ADDRESS;
-  d[2] = CEC_OWN_PHYSADDR>>8;
-  d[3] = CEC_OWN_PHYSADDR&0xFF;
+  d[2] = addr>>8;
+  d[3] = addr&0xFF;
   d[4] = CEC_OWN_TYPE;
-  dbg_s("> GivePhysAddr: physAddr: 0x"); dbg_n16(CEC_OWN_PHYSADDR); 
+  dbg_s("> GivePhysAddr: physAddr: 0x"); dbg_n16(addr); 
   dbg_s(", type: 0x"); dbg_n(CEC_OWN_TYPE);  dbg_c('\n');
   CEC_tx(d,5,CEC_TX_MAX_TRIES);
 }
@@ -174,12 +175,14 @@ void cecGiveDeviceVendorID(const uint8_t st, const uint8_t* data, const uint8_t 
 void cecRoutingChange(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   uint16_t from,to;
+  uint16_t addr = CEC_PhysicalAddr();
+
   from = (((uint16_t)data[2])<<8)|data[3];
   to = (((uint16_t)data[4])<<8)|data[5];
 
   dbg_s("< RoutingChange from 0x"); dbg_n16(from); 
   dbg_s(" to 0x"); dbg_n16(to); dbg_c('\n');
-  if(to != CEC_OWN_PHYSADDR)
+  if(to != addr)
     return;
 
   uint8_t d[4];
@@ -191,10 +194,10 @@ void cecRoutingChange(const uint8_t st, const uint8_t* data, const uint8_t len)
   // Set active source
   d[0] = CEC_ADDR_BROADCAST;
   d[1] = CEC_OPC_ACTIVE_SOURCE;
-  d[2] = CEC_OWN_PHYSADDR>>8;
-  d[3] = CEC_OWN_PHYSADDR&0xFF;
-  dbg_s("> ActiveSource: 0x"); dbg_n16(CEC_OWN_PHYSADDR); dbg_c('\n');
-  _cec_active_src = CEC_OWN_PHYSADDR;
+  d[2] = addr>>8;
+  d[3] = addr&0xFF;
+  dbg_s("> ActiveSource: 0x"); dbg_n16(addr); dbg_c('\n');
+  _cec_active_src = addr;
   CEC_tx(d,4,CEC_TX_MAX_TRIES);
 }
 
@@ -207,14 +210,15 @@ void cecSetStreamPath(const uint8_t st, const uint8_t* data, const uint8_t len)
 void cecRequestActiveSource(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   dbg_s("< RequestActiveSource\n");
-  if(_cec_active_src != CEC_OWN_PHYSADDR)
+  if(_cec_active_src != CEC_PhysicalAddr())
     return;
   uint8_t d[4];
+  uint16_t addr = CEC_PhysicalAddr();
   d[0] = CEC_ADDR_BROADCAST;
   d[1] = CEC_OPC_ACTIVE_SOURCE;
-  d[2] = CEC_OWN_PHYSADDR>>8;
-  d[3] = CEC_OWN_PHYSADDR&0xFF;
-  dbg_s("> ActiveSource: 0x"); dbg_n16(CEC_OWN_PHYSADDR); dbg_c('\n');
+  d[2] = addr>>8;
+  d[3] = addr&0xFF;
+  dbg_s("> ActiveSource: 0x"); dbg_n16(addr); dbg_c('\n');
   CEC_tx(d,4,CEC_TX_MAX_TRIES);
 }
 
