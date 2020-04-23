@@ -62,6 +62,13 @@ void cecGiveDeckStatus(const uint8_t st, const uint8_t* data, const uint8_t len)
 #define SL_COMMAND_REQUEST_RECONNECT    0x0b
 #define SL_COMMAND_REQUEST_POWER_STATUS 0xa0
 
+#define SL_TYPE_HDDRECORDER_DISC        0x01
+#define SL_TYPE_VCR                     0x02
+#define SL_TYPE_DVDPLAYER               0x03
+#define SL_TYPE_HDDRECORDER_DISC2       0x04
+#define SL_TYPE_HDDRECORDER             0x05
+
+
 void cecVendorCommand(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
   uint8_t d[5],olen=0;
@@ -70,26 +77,30 @@ void cecVendorCommand(const uint8_t st, const uint8_t* data, const uint8_t len)
   dbg_s("< cecVendorCommand: 0x"); dbg_n(data[2]); dbg_c(' ');
   switch(data[2])
   {
-    case 0x01:      // Init
+    case SL_COMMAND_INIT:
       dbg_s("Init");
-      d[2] = 0x02;  // Ack Init
-      d[3] = 0x05;  // HDRRECORDER
+      d[2] = SL_COMMAND_ACK_INIT;
+      d[3] = SL_TYPE_HDDRECORDER;
       olen = 4;
       break;
     //case 0x02:      // Ack Init
     //case 0x03:      // Power On    
     case 0x04:      // Connect request
       dbg_s("Connect request");
-      d[2] = 0x05;  // Set device mode
+      d[2] = SL_COMMAND_SET_DEVICE_MODE;
       d[3] = CEC_OPC_DEVICE_TYPE_RECORDER;
       olen = 4;
       break;
     //case 0x05:      // Set Device Mode
-    //case 0x0B:      // Request reconnect
+    case 0x0B:      // Request reconnect
+      dbg_s("Reconnect request");
+      d[1] = CEC_OPC_REPORT_POWER_STATUS;
+      d[2] = CEC_OPC_POWER_STATUS_STANDBY2ON;
+      olen = 3;
+      break;
     //case 0xa0:      // Request Power status
     default:
       dbg_s("Unknown vendor command");
-      break;
   };
   dbg_c('\n');
   if(olen)
