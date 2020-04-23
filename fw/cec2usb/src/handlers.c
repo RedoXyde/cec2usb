@@ -10,7 +10,7 @@ typedef struct {
   uint8_t kbd;
 } cec_key_map_t;
 
-#define CEC_KEYS_KBD_MAPPINGS_NB  27
+#define CEC_KEYS_KBD_MAPPINGS_NB  32
 const cec_key_map_t _cec_keys_mappings[CEC_KEYS_KBD_MAPPINGS_NB] = 
 {
   { .cec = 0x21, .kbd = KEYPAD_1        },
@@ -37,9 +37,14 @@ const cec_key_map_t _cec_keys_mappings[CEC_KEYS_KBD_MAPPINGS_NB] =
   { .cec = 0x44, .kbd = KEY_SPACE       },
   { .cec = 0x48, .kbd = KEY_R           },
   { .cec = 0x45, .kbd = KEY_X           },
+  { .cec = 0x46, .kbd = KEY_SPACE       },  // LG, Pause
   { .cec = 0x49, .kbd = KEY_F           },
   { .cec = 0x4c, .kbd = KEY_TAB         },
   { .cec = 0x4b, .kbd = KEY_PRINTSCREEN },
+  { .cec = 0x71, .kbd = KEY_C           },  // LG, Blue
+  { .cec = 0x72, .kbd = KEY_TAB         },  // LG, Red
+  { .cec = 0x73, .kbd = KEY_I           },  // LG, Green
+  { .cec = 0x74, .kbd = KEY_W           },  // LG, Yellow
 };
 
 uint16_t _cec_active_src = 0x000;
@@ -80,7 +85,7 @@ void cecVendorCommand(const uint8_t st, const uint8_t* data, const uint8_t len)
     case SL_COMMAND_INIT:
       dbg_s("Init");
       d[2] = SL_COMMAND_ACK_INIT;
-      d[3] = SL_TYPE_HDDRECORDER;
+      d[3] = SL_TYPE_HDDRECORDER_DISC2;
       olen = 4;
       break;
     //case 0x02:      // Ack Init
@@ -164,6 +169,7 @@ void cecReportPowerStatus(const uint8_t st, const uint8_t* data, const uint8_t l
 
 void cecDeviceVendorID(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
+  return; // LG TV is too chatty =/
   dbg_s("< cecDeviceVendorID from 0x"); dbg_n(data[0]>>4);
   dbg_s(": 0x"); dbg_n(data[2]); 
   dbg_s(", 0x"); dbg_n(data[3]);
@@ -290,6 +296,9 @@ void cecKeyUp(const uint8_t st, const uint8_t* data, const uint8_t len)
 
 void cecSpy(const uint8_t st, const uint8_t* data, const uint8_t len)
 {
+  #ifndef CEC_SPY
+  if(len<2) return; // Don't print PING
+  #endif
   dbg_s("[0x");   dbg_n(data[0]>>4);
   dbg_s(" > 0x"); dbg_n(data[0]&0xF);
   dbg_c(' ');     dbg_c(st == 0x40 ? 'n' : 'a');
