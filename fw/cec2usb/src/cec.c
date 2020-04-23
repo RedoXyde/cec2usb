@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "cec.h"
+#include "cec_protocol.h"
 #include "common.h"
 
 #include <string.h>
@@ -242,10 +243,11 @@ CEC_msg_t _cec_msg;
 
 #define CEC_RX_QUEUE_SIZE 12
 #define CEC_TX_QUEUE_SIZE 6
-#define CEC_OPCODES_SIZE  16
+#define CEC_OPCODES_SIZE  32
 
 typedef struct
 {
+  uint16_t  phys_addr;
   uint8_t   addr;
   uint8_t   mode;
   struct
@@ -316,7 +318,8 @@ void CEC_Init(void)
   //PORTD |= _BV(CEC_IN); // Pullup
 
   _cec_dev.mode = CEC_DEFAULT;
-  _cec_dev.addr = 0xF;
+  _cec_dev.addr = CEC_ADDR_UNREGISTERED;
+  _cec_dev.phys_addr = CEC_PHYSADDR_INVALID;
   _cec_dev.rx_r = _cec_dev.rx_w = 0;
   _cec_dev.tx_r = _cec_dev.tx_w = 0;
   _cec_dev.tx_delay = 0;
@@ -421,9 +424,29 @@ void CEC_processQueue(void)
   }
 }
 
+uint16_t CEC_PhysicalAddr(void)
+{
+  return _cec_dev.phys_addr;
+}
+
+void CEC_setPhysicalAddr(const uint16_t v)
+{
+  _cec_dev.phys_addr = v;
+}
+
+uint8_t CEC_Mode(void)
+{
+  return _cec_dev.mode;
+}
+
 void CEC_setMode(const uint8_t m)
 {
   _cec_dev.mode = m;
+}
+
+uint8_t CEC_Addr(void)
+{
+  return _cec_dev.addr;
 }
 
 int8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll)

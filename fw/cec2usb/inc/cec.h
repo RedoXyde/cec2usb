@@ -38,13 +38,14 @@ SOFTWARE.
 #define CEC_PROMISCUIOUS      0x02
 #define CEC_ALLOW_ALL_OPCODES 0x04
 
-#define CEC_HWADDR_LEN 4
-
-void CEC_Init(void);
-uint8_t CEC_isIdle(void);
-void CEC_setMode(const uint8_t m);
-void CEC_setHWAddr(const uint8_t addr[CEC_HWADDR_LEN]);
-int8_t CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll);
+void     CEC_Init(void);
+uint8_t  CEC_isIdle(void);
+uint8_t  CEC_mode(void);
+void     CEC_setMode(const uint8_t m);
+uint16_t CEC_PhysicalAddr(void);
+void     CEC_setPhysicalAddr(const uint16_t addr);
+uint8_t  CEC_Addr(void);
+int8_t   CEC_registerLogicalAddr(const uint8_t addr, const uint8_t skipPoll);
 
 typedef void (*cec_cb)(const uint8_t st, const uint8_t* data, const uint8_t len);
 
